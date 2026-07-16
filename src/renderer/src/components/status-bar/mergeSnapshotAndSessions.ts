@@ -156,7 +156,25 @@ export function mergeSnapshotAndSessions(
     }
     seenSessionIds.add(session.id)
 
-    const runtimeAttribution = resolveRuntimeTerminalAttribution(session.id, ctx)
+    const route = resolveSessionRoute(session.id, ctx)
+    const resolvedRuntimeAttribution = resolveRuntimeTerminalAttribution(session.id, ctx)
+    const runtimeAttribution = (() => {
+      if (!route.connectionId || !resolvedRuntimeAttribution) {
+        return resolvedRuntimeAttribution
+      }
+      if (
+        resolvedRuntimeAttribution.originConnectionId &&
+        resolvedRuntimeAttribution.originConnectionId !== route.connectionId
+      ) {
+        return null
+      }
+      const attributedRepoId = deriveRepoIdFromWorktreeId(resolvedRuntimeAttribution.worktreeId)
+      const attributedConnectionId = ctx.repoConnectionIdById.get(attributedRepoId)
+      if (attributedConnectionId != null && attributedConnectionId !== route.connectionId) {
+        return null
+      }
+      return resolvedRuntimeAttribution
+    })()
 
     // 2a: tab-store walk — does this session belong to a tab in this renderer?
     const tabId = index.ptyIdToTabId.get(session.id) ?? runtimeAttribution?.originTabId ?? null
@@ -214,7 +232,6 @@ export function mergeSnapshotAndSessions(
     }
 
     const bound = ctx.workspaceSessionReady && boundPtyIds.has(session.id)
-    const route = resolveSessionRoute(session.id, ctx)
     const origin = index.originByPtyId.get(session.id)
     row.sessions.push({
       sessionId: session.id,

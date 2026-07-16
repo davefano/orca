@@ -303,6 +303,49 @@ describe('mergeSnapshotAndSessions', () => {
     })
   })
 
+  it('ignores runtime attribution when daemon SSH route points at another host', () => {
+    const sessionId = 'ssh:ssh-jazz@@pty-2'
+    const ds: DaemonSession[] = [{ id: sessionId, cwd: '', title: 'shell' }]
+    const ctx = baseCtx({
+      repoDisplayNameById: new Map([['teal-bumblebee', 'Teal']]),
+      repoConnectionIdById: new Map([['teal-bumblebee', 'ssh-bumblebee']]),
+      sshTargetLabelById: new Map([['ssh-jazz', 'Jazz']]),
+      runtimeTerminalByPtyId: new Map([
+        [
+          sessionId,
+          {
+            handle: 'term-jazz',
+            ptyId: sessionId,
+            worktreeId: 'teal-bumblebee::/Users/daveagent/workspaces/teal',
+            worktreePath: '/Users/daveagent/workspaces/teal',
+            title: 'Terminal 1',
+            originTabId: null,
+            originLeafId: null,
+            originConnectionId: null,
+            orphanReason: 'live PTY has a workspace but no renderer pane binding'
+          }
+        ]
+      ])
+    })
+
+    const out = mergeSnapshotAndSessions(null, ds, ctx)
+
+    expect(out).toHaveLength(1)
+    expect(out[0]).toMatchObject({
+      repoId: UNATTRIBUTED_REPO_ID,
+      repoName: 'Unattributed'
+    })
+    expect(out[0].worktrees[0].sessions[0]).toMatchObject({
+      sessionId,
+      label: 'shell',
+      connectionId: 'ssh-jazz',
+      hostLabel: 'Jazz',
+      relayPtyId: 'pty-2',
+      originLeafId: null,
+      orphanReason: 'daemon session has no workspace or pane binding'
+    })
+  })
+
   it('repo aggregate sums only worktrees with numeric metrics; remote-by-connectionId flags chip', () => {
     // Why: a single repo can be both reflected as a snapshot worktree
     // (covered by the local collector) and a daemon-only session

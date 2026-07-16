@@ -10,11 +10,14 @@ import {
   ChevronDown,
   ChevronRight,
   Globe,
+  GripHorizontal,
   LoaderCircle,
   MemoryStick,
+  Plus,
   RotateCw,
   Terminal,
   Trash2,
+  Undo2,
   X
 } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -56,6 +59,7 @@ import {
   isResourceSessionActivationKey,
   navigateResourceSessionToTab
 } from './resource-session-navigation'
+import { makePaneKey } from '../../../../shared/stable-pane-id'
 import {
   getResourceUsageAllWorktrees,
   getResourceUsageBrowserTabsByWorktree,
@@ -78,6 +82,7 @@ import {
   countUnboundDaemonSessions,
   type ResourceSessionBindingInputs
 } from './resource-session-bindings'
+import { canAttachSessionToOrigin } from './resource-session-origin-attachment'
 import { createClosedResourceSessionCountSelector } from './resource-session-count-selector'
 import { translate } from '@/i18n/i18n'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
@@ -88,14 +93,30 @@ const selectClosedResourceSessionCount = createClosedResourceSessionCountSelecto
 
 type SortOption = 'memory' | 'cpu' | 'name'
 
+type FloatingPosition = {
+  x: number
+  y: number
+}
+
+type FloatingDragState = {
+  startX: number
+  startY: number
+  originX: number
+  originY: number
+  activated: boolean
+}
+
 const METRIC_COLUMNS_CLS = 'flex items-center shrink-0 tabular-nums'
 const CPU_COLUMN_CLS = 'w-12 text-right'
 const MEM_COLUMN_CLS = 'w-16 text-right'
+const FLOATING_DRAG_THRESHOLD_PX = 4
+const FLOATING_PANEL_MAX_OFFSET_X = 640
+const FLOATING_PANEL_MAX_OFFSET_Y = 480
 // Why: every row (session, worktree, repo, app) AND the column header
 // reserve this same trailing gutter so the CPU/Memory columns line up
 // regardless of whether a row carries a kill-X. The X button sits inside
 // this gutter for session rows; other rows leave it blank.
-const ROW_TRAILING_GUTTER_CLS = 'w-5 shrink-0 flex items-center justify-end'
+const ROW_TRAILING_GUTTER_CLS = 'w-10 shrink-0 flex items-center justify-end gap-0.5'
 
 // ─── Formatters ─────────────────────────────────────────────────────
 
@@ -384,14 +405,23 @@ export function SessionRow({
   session,
   worktreeId,
   onNavigate,
+  onAttach,
+  onAttachToNewPane,
   onKill
 }: {
   session: UnifiedSessionRow
   worktreeId: string
   onNavigate: (tabId: string, paneKey: string | null) => void
+  onAttach: (session: UnifiedSessionRow) => void
+  onAttachToNewPane: (session: UnifiedSessionRow, worktreeId: string) => void
   onKill: (session: UnifiedSessionRow) => void
 }): React.JSX.Element {
   const clickable = session.tabId !== null && session.bound
+  const attachable = !session.bound && session.tabId !== null && session.originLeafId !== null
+  const canAttachToNewPane =
+    !session.bound &&
+    worktreeId !== ORPHAN_WORKTREE_ID &&
+    !worktreeId.startsWith(`${UNATTRIBUTED_REPO_ID}::`)
   const handleClick = (): void => {
     if (clickable && session.tabId) {
       onNavigate(session.tabId, session.paneKey)
@@ -450,6 +480,63 @@ export function SessionRow({
           list); orphan sessions show it always so the "this is reclaimable"
           affordance survives. Mirrors Settings > Manage Sessions. */}
       <span className={ROW_TRAILING_GUTTER_CLS}>
+        {attachable && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onAttach(session)
+            }}
+            className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            aria-label={translate(
+              'auto.components.status.bar.ResourceUsageStatusSegment.0b8c7b66f0',
+              'Attach session {{value0}}',
+              { value0: session.sessionId }
+            )}
+            title={translate(
+              'auto.components.status.bar.ResourceUsageStatusSegment.7db3e9d2a1',
+              'Attach detached session'
+            )}
+          >
+            <RotateCw className="size-3" />
+          </button>
+        )}
+        {canAttachToNewPane ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onAttachToNewPane(session, worktreeId)
+            }}
+            className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            aria-label={translate(
+              'auto.components.status.bar.ResourceUsageStatusSegment.b18f12b2cb',
+              'Attach session {{value0}} to new pane',
+              { value0: session.sessionId }
+            )}
+            title={translate(
+              'auto.components.status.bar.ResourceUsageStatusSegment.c3e00bfef5',
+              'Attach detached session to a new pane'
+            )}
+          >
+            <Plus className="size-3" />
+          </button>
+        ) : (
+          !session.bound && (
+            <span
+              className="rounded px-1 py-0.5 text-[9px] uppercase tracking-wide text-muted-foreground/60"
+              title={translate(
+                'auto.components.status.bar.ResourceUsageStatusSegment.79a5f2a81b',
+                'This detached session has no workspace attribution, so it can only be closed.'
+              )}
+            >
+              {translate(
+                'auto.components.status.bar.ResourceUsageStatusSegment.97ed6882ec',
+                'No origin'
+              )}
+            </span>
+          )
+        )}
         <button
           type="button"
           onClick={(e) => {
@@ -497,6 +584,8 @@ export function WorktreeRow({
   onNavigate,
   onDelete,
   onKillSession,
+  onAttachSession,
+  onAttachSessionToNewPane,
   navigateToTab
 }: {
   worktree: UnifiedWorktreeRow
@@ -507,6 +596,8 @@ export function WorktreeRow({
   onNavigate: () => void
   onDelete: () => void
   onKillSession: (session: UnifiedSessionRow) => void
+  onAttachSession: (session: UnifiedSessionRow) => void
+  onAttachSessionToNewPane: (session: UnifiedSessionRow, worktreeId: string) => void
   navigateToTab: (tabId: string, paneKey: string | null) => void
 }): React.JSX.Element {
   const hasResources = worktree.sessions.length > 0 || worktree.browsers.length > 0
@@ -651,6 +742,8 @@ export function WorktreeRow({
             session={session}
             worktreeId={worktree.worktreeId}
             onNavigate={navigateToTab}
+            onAttach={onAttachSession}
+            onAttachToNewPane={onAttachSessionToNewPane}
             onKill={onKillSession}
           />
         ))}
@@ -673,6 +766,8 @@ function ResourceTree({
   navigateToWorktree,
   navigateToTab,
   onDelete,
+  onAttachSession,
+  onAttachSessionToNewPane,
   onKillSession
 }: {
   repos: UnifiedProjectGroup[]
@@ -685,6 +780,8 @@ function ResourceTree({
   navigateToWorktree: (worktreeId: string) => void
   navigateToTab: (tabId: string, paneKey: string | null) => void
   onDelete: (worktreeId: string) => void
+  onAttachSession: (session: UnifiedSessionRow) => void
+  onAttachSessionToNewPane: (session: UnifiedSessionRow, worktreeId: string) => void
   onKillSession: (session: UnifiedSessionRow) => void
 }): React.JSX.Element {
   const worktreeById = useWorktreeMap()
@@ -710,6 +807,8 @@ function ResourceTree({
         onNavigate={() => navigateToWorktree(wt.worktreeId)}
         onDelete={() => onDelete(wt.worktreeId)}
         onKillSession={onKillSession}
+        onAttachSession={onAttachSession}
+        onAttachSessionToNewPane={onAttachSessionToNewPane}
         navigateToTab={navigateToTab}
       />
     )
@@ -794,6 +893,10 @@ export function ResourceUsageStatusSegment({
   const closedSessionCount = useAppStore(selectClosedResourceSessionCount)
   const sshTargetLabels = useAppStore((s) => s.sshTargetLabels)
   const setActiveView = useAppStore((s) => s.setActiveView)
+  const setTabLayout = useAppStore((s) => s.setTabLayout)
+  const updateTabPtyId = useAppStore((s) => s.updateTabPtyId)
+  const createTab = useAppStore((s) => s.createTab)
+  const setTabCustomTitle = useAppStore((s) => s.setTabCustomTitle)
   const openModal = useAppStore((s) => s.openModal)
   const openSpacePage = useAppStore((s) => s.openSpacePage)
   const recordFeatureInteraction = useAppStore((s) => s.recordFeatureInteraction)
@@ -803,6 +906,8 @@ export function ResourceUsageStatusSegment({
   const workspaceSpaceScanning = useAppStore((s) => s.workspaceSpaceScanning)
 
   const [open, setOpen] = useState(false)
+  const [floatingPosition, setFloatingPosition] = useState<FloatingPosition | null>(null)
+  const [floatingDragging, setFloatingDragging] = useState(false)
   const [sortOption, setSortOption] = useState<SortOption>('memory')
   const [collapsedRepos, setCollapsedRepos] = useState<Set<string>>(new Set())
   const [collapsedWorktrees, setCollapsedWorktrees] = useState<Set<string>>(new Set())
@@ -852,8 +957,21 @@ export function ResourceUsageStatusSegment({
   // fall to <body>. We park a ref on the popover body so we can restore focus
   // somewhere stable for keyboard users.
   const popoverBodyRef = useRef<HTMLDivElement | null>(null)
+  const popoverContentRef = useRef<HTMLDivElement | null>(null)
+  const floatingDragRef = useRef<FloatingDragState | null>(null)
   const popoverBodyFocusFrameRef = useRef<number | null>(null)
   const mountedRef = useMountedRef()
+
+  const clampFloatingOffset = useCallback((position: FloatingPosition): FloatingPosition => {
+    return {
+      x: Math.min(Math.max(-FLOATING_PANEL_MAX_OFFSET_X, position.x), FLOATING_PANEL_MAX_OFFSET_X),
+      y: Math.min(Math.max(-FLOATING_PANEL_MAX_OFFSET_Y, position.y), FLOATING_PANEL_MAX_OFFSET_Y)
+    }
+  }, [])
+
+  const setPopoverContentNode = useCallback((node: HTMLDivElement | null): void => {
+    popoverContentRef.current = node
+  }, [])
 
   const cancelPopoverBodyFocusFrame = useCallback((): void => {
     if (popoverBodyFocusFrameRef.current === null) {
@@ -873,6 +991,69 @@ export function ResourceUsageStatusSegment({
     },
     [cancelPopoverBodyFocusFrame]
   )
+
+  const handleFloatingDragStart = useCallback(
+    (event: React.MouseEvent<HTMLElement>): void => {
+      if (event.button !== 0) {
+        return
+      }
+      const origin = floatingPosition ?? { x: 0, y: 0 }
+      floatingDragRef.current = {
+        startX: event.clientX,
+        startY: event.clientY,
+        originX: origin.x,
+        originY: origin.y,
+        activated: false
+      }
+      setFloatingDragging(true)
+      event.stopPropagation()
+      event.preventDefault()
+    },
+    [floatingPosition]
+  )
+
+  useEffect(() => {
+    if (!floatingDragging) {
+      return
+    }
+
+    const handleMouseMove = (event: MouseEvent): void => {
+      const drag = floatingDragRef.current
+      if (!drag) {
+        return
+      }
+      const deltaX = event.clientX - drag.startX
+      const deltaY = event.clientY - drag.startY
+      if (!drag.activated && Math.hypot(deltaX, deltaY) < FLOATING_DRAG_THRESHOLD_PX) {
+        event.preventDefault()
+        return
+      }
+      drag.activated = true
+      setFloatingPosition(
+        clampFloatingOffset({
+          x: drag.originX + deltaX,
+          y: drag.originY + deltaY
+        })
+      )
+      event.preventDefault()
+    }
+
+    const handleMouseUp = (event: MouseEvent): void => {
+      if (!floatingDragRef.current) {
+        return
+      }
+      floatingDragRef.current = null
+      setFloatingDragging(false)
+      event.preventDefault()
+    }
+
+    window.addEventListener('mousemove', handleMouseMove, { passive: false })
+    window.addEventListener('mouseup', handleMouseUp, { passive: false })
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [clampFloatingOffset, floatingDragging])
 
   const refreshSessions = useCallback(async () => {
     try {
@@ -1211,6 +1392,76 @@ export function ResourceUsageStatusSegment({
     [refreshSessions]
   )
 
+  const handleAttachSession = useCallback(
+    (session: UnifiedSessionRow): void => {
+      if (!session.tabId || !session.originLeafId) {
+        console.warn('[resource-usage] refusing to attach session without origin', session)
+        return
+      }
+      const layout = terminalLayoutsByTabId[session.tabId]
+      if (!layout?.root) {
+        console.warn('[resource-usage] refusing to attach session without layout', session)
+        return
+      }
+      if (
+        !canAttachSessionToOrigin(layout.ptyIdsByLeafId, session.originLeafId, session.sessionId)
+      ) {
+        // Why: replacing an occupied origin would silently orphan the pane's newer session.
+        console.warn('[resource-usage] refusing to replace occupied origin leaf', session)
+        return
+      }
+
+      setTabLayout(session.tabId, {
+        ...layout,
+        activeLeafId: session.originLeafId,
+        ptyIdsByLeafId: {
+          ...layout.ptyIdsByLeafId,
+          [session.originLeafId]: session.sessionId
+        }
+      })
+      updateTabPtyId(session.tabId, session.sessionId)
+      navigateToTab(session.tabId, makePaneKey(session.tabId, session.originLeafId))
+      void refreshSessions()
+      void refreshRuntimeTerminals()
+    },
+    [
+      terminalLayoutsByTabId,
+      setTabLayout,
+      updateTabPtyId,
+      navigateToTab,
+      refreshSessions,
+      refreshRuntimeTerminals
+    ]
+  )
+
+  const handleAttachSessionToNewPane = useCallback(
+    (session: UnifiedSessionRow, worktreeId: string): void => {
+      if (session.bound) {
+        return
+      }
+      if (worktreeId === ORPHAN_WORKTREE_ID || worktreeId.startsWith(`${UNATTRIBUTED_REPO_ID}::`)) {
+        console.warn(
+          '[resource-usage] refusing to attach session without workspace attribution',
+          session
+        )
+        return
+      }
+
+      const relayLabel = session.relayPtyId ?? 'PTY'
+      const tab = createTab(worktreeId, undefined, undefined, {
+        initialPtyId: session.sessionId,
+        activate: true,
+        recordInteraction: true,
+        quickCommandLabel: relayLabel
+      })
+      setTabCustomTitle(tab.id, `Recovered ${relayLabel}`)
+      navigateToTab(tab.id, null)
+      void refreshSessions()
+      void refreshRuntimeTerminals()
+    },
+    [createTab, navigateToTab, refreshRuntimeTerminals, refreshSessions, setTabCustomTitle]
+  )
+
   const handleKillOrphans = useCallback(async () => {
     if (!workspaceSessionReady) {
       return
@@ -1347,11 +1598,19 @@ export function ResourceUsageStatusSegment({
       </Tooltip>
 
       <PopoverContent
+        ref={setPopoverContentNode}
         side="top"
         align="end"
         sideOffset={8}
         {...STATUS_BAR_CONTEXT_MENU_EXEMPT_PROPS}
         className="w-[26rem] max-w-[calc(100vw-2rem)] p-0"
+        style={
+          floatingPosition
+            ? {
+                transform: `translate(${floatingPosition.x}px, ${floatingPosition.y}px)`
+              }
+            : undefined
+        }
         onOpenAutoFocus={(event) => event.preventDefault()}
         // Why: clicking a terminal row activates a tab, which causes xterm
         // to programmatically focus the terminal DOM node. Radix would
@@ -1362,6 +1621,24 @@ export function ResourceUsageStatusSegment({
       >
         <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-1.5">
           <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-foreground">
+            <span
+              role="presentation"
+              title={translate(
+                'auto.components.status.bar.ResourceUsageStatusSegment.0f41c4e8d1',
+                'Move Resource Manager'
+              )}
+              onMouseDown={handleFloatingDragStart}
+              onClick={(event) => {
+                event.stopPropagation()
+                event.preventDefault()
+              }}
+              className={cn(
+                'inline-flex size-5 shrink-0 touch-none select-none items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
+                floatingDragging ? 'cursor-grabbing' : 'cursor-grab'
+              )}
+            >
+              <GripHorizontal className="size-3" />
+            </span>
             <MemoryStick className="size-3 shrink-0 text-muted-foreground" />
             <span className="truncate">
               {translate('auto.components.status.bar.StatusBar.d1e1a7a6bf', 'Resource Manager')}
@@ -1369,6 +1646,29 @@ export function ResourceUsageStatusSegment({
           </div>
 
           <div className="flex items-center gap-0.5">
+            {floatingPosition && (
+              <Tooltip delayDuration={200}>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => setFloatingPosition(null)}
+                    aria-label={translate(
+                      'auto.components.status.bar.ResourceUsageStatusSegment.b2f6b4c0b4',
+                      'Reset Resource Manager position'
+                    )}
+                    className="inline-flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  >
+                    <Undo2 className="size-3" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" sideOffset={6}>
+                  {translate(
+                    'auto.components.status.bar.ResourceUsageStatusSegment.b2f6b4c0b4',
+                    'Reset Resource Manager position'
+                  )}
+                </TooltipContent>
+              </Tooltip>
+            )}
             <Tooltip delayDuration={200}>
               <TooltipTrigger asChild>
                 <button
@@ -1410,6 +1710,27 @@ export function ResourceUsageStatusSegment({
                 {translate(
                   'auto.components.status.bar.ResourceUsageStatusSegment.bd19fd7a59',
                   'Kill all sessions'
+                )}
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip delayDuration={200}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  aria-label={translate(
+                    'auto.components.status.bar.ResourceUsageStatusSegment.17a6a2c4f3',
+                    'Close Resource Manager'
+                  )}
+                  className="inline-flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  <X className="size-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" sideOffset={6}>
+                {translate(
+                  'auto.components.status.bar.ResourceUsageStatusSegment.17a6a2c4f3',
+                  'Close Resource Manager'
                 )}
               </TooltipContent>
             </Tooltip>
@@ -1625,6 +1946,8 @@ export function ResourceUsageStatusSegment({
                 navigateToWorktree={navigateToWorktree}
                 navigateToTab={navigateToTab}
                 onDelete={deleteWorktree}
+                onAttachSession={handleAttachSession}
+                onAttachSessionToNewPane={handleAttachSessionToNewPane}
                 onKillSession={handleKillSession}
               />
             )}
