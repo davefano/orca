@@ -1748,7 +1748,9 @@ describe('OrcaRuntimeService', () => {
       branch: 'feature/foo',
       ptyId: 'pty-1',
       title: 'Claude',
-      preview: 'hello from terminal'
+      preview: 'hello from terminal',
+      presentation: 'visible',
+      presentationSource: 'renderer_graph'
     })
 
     const shown = await runtime.showTerminal(terminals.terminals[0].handle)
@@ -1950,7 +1952,10 @@ describe('OrcaRuntimeService', () => {
 
     const after = await runtime.listTerminals(`id:${TEST_WORKTREE_ID}`)
     expect(after.terminals).toHaveLength(1)
-    expect(after.terminals[0].ptyId).toBe('pty-agent')
+    expect(after.terminals[0]).toMatchObject({
+      ptyId: 'pty-agent',
+      presentation: 'visible'
+    })
   })
 
   it('invalidates a re-keyed leaf-unique handle so in-flight waiters fail fast', async () => {
