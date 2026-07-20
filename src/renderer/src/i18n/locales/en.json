@@ -3388,7 +3388,13 @@
             "a37e8c15d4": "Run kimi in a terminal on the computer running Orca and wait for it to start, then retry usage."
           },
           "SshTargetStatusRow": {
-            "sshHost": "SSH Host"
+            "sshHost": "SSH Host",
+            "refreshingWorkspace": "Checking workspace state",
+            "workspaceUnavailable": "Remote workspace sync unavailable",
+            "workspaceCurrent": "Workspace is current",
+            "workspaceStillDiffers": "Workspace still differs from the server",
+            "workspaceRefreshFailed": "Workspace refresh failed",
+            "refreshWorkspace": "Refresh"
           },
           "usagePercentageLabel": {
             "used": "{{value0}}% used",
@@ -4585,7 +4591,8 @@
           "groupDeleteFailedDesc": "Something went wrong while deleting the group. No projects were removed.",
           "failedNestWorkspace": "Failed to nest workspace",
           "sidebarRowMissing": "Target no longer exists",
-          "failedUnnestWorkspace": "Failed to unnest workspace"
+          "failedUnnestWorkspace": "Failed to unnest workspace",
+          "serverSourceLabel": "From Orca server {{name}}"
         },
         "WorktreeMetaDialog": {
           "3db0a2a593": "Cancel",

@@ -9,6 +9,7 @@ import { exportRemoteWorkspaceSession } from '../../shared/remote-workspace-sess
 import type {
   RemoteWorkspaceChangedEvent,
   RemoteWorkspaceConnectedClient,
+  RemoteWorkspaceInspection,
   RemoteWorkspacePatchResult,
   RemoteWorkspaceSession,
   RemoteWorkspaceSnapshot
@@ -390,6 +391,7 @@ export function registerRemoteWorkspaceHandlers(
     handleRemoteWorkspaceNotification
   )
   ipcMain.removeHandler('remoteWorkspace:get')
+  ipcMain.removeHandler('remoteWorkspace:inspect')
   ipcMain.removeHandler('remoteWorkspace:setForConnectedTargets')
   ipcMain.removeHandler('remoteWorkspace:listEnabledConnectedTargets')
   ipcMain.removeHandler('remoteWorkspace:listConnectedClients')
@@ -402,6 +404,29 @@ export function registerRemoteWorkspaceHandlers(
     }
     return getRemoteSnapshot(target)
   })
+
+  ipcMain.handle(
+    'remoteWorkspace:inspect',
+    async (
+      _event,
+      args: { targetId: string; session?: WorkspaceSessionState }
+    ): Promise<RemoteWorkspaceInspection | null> => {
+      const target = getSshConnectionStore()?.getTarget(args.targetId)
+      if (!target) {
+        return null
+      }
+      const snapshot = await getRemoteSnapshot(target)
+      if (!snapshot) {
+        return null
+      }
+      const workspaceSession = args.session ?? store.getWorkspaceSession()
+      const localSession = exportSessionForTarget(store, target.id, workspaceSession)
+      return {
+        snapshot,
+        matchesLocalSession: remoteWorkspaceSessionMatchesSnapshot(snapshot, localSession)
+      }
+    }
+  )
 
   ipcMain.handle(
     'remoteWorkspace:setForConnectedTargets',
