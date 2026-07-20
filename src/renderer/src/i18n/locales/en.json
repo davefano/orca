@@ -4217,7 +4217,7 @@
           "65a9820bd1": "Agent statuses",
           "219ebf1961": "Branch name",
           "folderPathIdentity": "Branch / folder path",
-          "repository": "Repository"
+          "repository": "Repo"
         },
         "SshDisconnectedDialog": {
           "ca4a7892af": "Connecting...",
