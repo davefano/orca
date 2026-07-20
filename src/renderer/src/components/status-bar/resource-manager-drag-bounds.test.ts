@@ -66,7 +66,6 @@ describe('clampResourceManagerPosition', () => {
       })
     ).toEqual({ x: 952, y: 620 })
   })
-
   // Why: a saved offset from a larger display must not strand the panel
   // off-screen once the viewport shrinks (window resize, monitor change).
   it('pulls a panel parked off a shrunken viewport back into view', () => {

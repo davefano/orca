@@ -21,6 +21,29 @@ export type RemoteWorkspaceSyncStatus = {
   message?: string
 }
 
+function isTransientRemoteWorkspaceSyncError(status: RemoteWorkspaceSyncStatus): boolean {
+  return (
+    status.phase === 'error' &&
+    typeof status.message === 'string' &&
+    status.message.includes('Remote connection dropped')
+  )
+}
+
+function normalizeRemoteWorkspaceSyncStatus(
+  status: RemoteWorkspaceSyncStatus,
+  connectionState: SshConnectionState | undefined
+): RemoteWorkspaceSyncStatus {
+  if (!isTransientRemoteWorkspaceSyncError(status) || connectionState?.status !== 'connected') {
+    return status
+  }
+
+  return {
+    ...status,
+    phase: 'offline',
+    message: status.message || 'Remote workspace sync unavailable'
+  }
+}
+
 export type SshCredentialRequest = {
   requestId: string
   targetId: string
@@ -109,8 +132,20 @@ export const createSshSlice: StateCreator<AppState, [], [], SshSlice> = (set) =>
         blockedConnections = { ...blockedConnections }
         delete blockedConnections[targetId]
       }
+      const existingSyncStatus = s.remoteWorkspaceSyncStatusByTargetId[targetId]
+      const normalizedSyncStatus = existingSyncStatus
+        ? normalizeRemoteWorkspaceSyncStatus(existingSyncStatus, state)
+        : null
+      const remoteWorkspaceSyncStatusByTargetId =
+        normalizedSyncStatus && normalizedSyncStatus !== existingSyncStatus
+          ? {
+              ...s.remoteWorkspaceSyncStatusByTargetId,
+              [targetId]: normalizedSyncStatus
+            }
+          : s.remoteWorkspaceSyncStatusByTargetId
       return {
         sshConnectionStates: next,
+        remoteWorkspaceSyncStatusByTargetId,
         sshConnectedGeneration: didReconnect
           ? s.sshConnectedGeneration + 1
           : s.sshConnectedGeneration,
@@ -148,12 +183,18 @@ export const createSshSlice: StateCreator<AppState, [], [], SshSlice> = (set) =>
       return { remoteWorkspaceHydratedTargetIds: next }
     }),
   setRemoteWorkspaceSyncStatus: (targetId, status) =>
-    set((s) => ({
-      remoteWorkspaceSyncStatusByTargetId: {
-        ...s.remoteWorkspaceSyncStatusByTargetId,
-        [targetId]: status
+    set((s) => {
+      const nextStatus = normalizeRemoteWorkspaceSyncStatus(
+        status,
+        s.sshConnectionStates.get(targetId)
+      )
+      return {
+        remoteWorkspaceSyncStatusByTargetId: {
+          ...s.remoteWorkspaceSyncStatusByTargetId,
+          [targetId]: nextStatus
+        }
       }
-    })),
+    }),
   enqueueSshCredentialRequest: (req) =>
     set((s) => ({ sshCredentialQueue: [...s.sshCredentialQueue, req] })),
   removeSshCredentialRequest: (requestId) =>

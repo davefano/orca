@@ -3088,7 +3088,17 @@
             "b8f4a2c1d0e3": "고아 {{value0}}개",
             "c7e3b1a0d9f2": "고아 terminal {{value0}}개 종료",
             "d8f4c2b1e0a3": "고아 terminals {{value0}}개 종료",
-            "e9a5d3c2b1f0": "{{value0}}을(를) 종료할까요?"
+            "e9a5d3c2b1f0": "{{value0}}을(를) 종료할까요?",
+            "1a3f9d7c22": "Detached",
+            "0b8c7b66f0": "Attach session {{value0}}",
+            "7db3e9d2a1": "Attach detached session",
+            "b18f12b2cb": "Attach session {{value0}} to new pane",
+            "c3e00bfef5": "Attach detached session to a new pane",
+            "79a5f2a81b": "This detached session has no workspace attribution, so it can only be closed.",
+            "97ed6882ec": "No origin",
+            "0f41c4e8d1": "Move Resource Manager",
+            "b2f6b4c0b4": "Reset Resource Manager position",
+            "17a6a2c4f3": "Close Resource Manager"
           },
           "SshStatusSegment": {
             "3ad70e0365": "원격 호스트 관리…",
