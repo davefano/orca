@@ -1456,7 +1456,7 @@ const VirtualizedWorktreeViewport = React.memo(function VirtualizedWorktreeViewp
   const sshConnectedGeneration = useAppStore((s) => s.sshConnectedGeneration)
   const prVisibleRefreshGeneration = useAppStore((s) => s.prVisibleRefreshGeneration)
   const settings = useAppStore((s) => s.settings)
-  const runtimeEnvironments = useAppStore((s) => s.runtimeEnvironments)
+  const runtimeEnvironments = useAppStore((s) => s.runtimeEnvironments) ?? []
   const runtimeEnvironmentNameById = useMemo(
     () => new Map(runtimeEnvironments.map((environment) => [environment.id, environment.name])),
     [runtimeEnvironments]
