@@ -2283,13 +2283,21 @@ function mergeProjectHostSetupCompatibilityState(
     }))
   const projectedProjects = projection.projects.map((project) => {
     const existingProject = existingProjectsById.get(project.id)
-    return existingProject?.localWindowsRuntimePreference
-      ? {
-          ...project,
-          localWindowsRuntimePreference: existingProject.localWindowsRuntimePreference,
-          updatedAt: Math.max(project.updatedAt, existingProject.updatedAt)
-        }
-      : project
+    if (!existingProject) {
+      return project
+    }
+    return {
+      ...project,
+      // Why: a project name belongs to the shared project, while repo names
+      // describe individual host setups. Re-projecting compatibility rows must
+      // not let whichever host repo appears first rename the shared project.
+      displayName:
+        project.sourceRepoIds.length > 1 ? existingProject.displayName : project.displayName,
+      ...(existingProject.localWindowsRuntimePreference
+        ? { localWindowsRuntimePreference: existingProject.localWindowsRuntimePreference }
+        : {}),
+      updatedAt: Math.max(project.updatedAt, existingProject.updatedAt)
+    }
   })
   return {
     projects: [...projectedProjects, ...independentProjects],
