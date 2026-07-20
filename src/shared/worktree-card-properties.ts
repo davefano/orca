@@ -50,6 +50,7 @@ export const WORKTREE_CARD_PROPERTIES = [
   'unread',
   'ci',
   'branch',
+  'host',
   'issue',
   'linear-issue',
   'jira-issue',

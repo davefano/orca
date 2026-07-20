@@ -3213,6 +3213,8 @@ export type WorktreeCardProperty =
   | 'ci'
   // Migration-only: legacy detailed cards showed branch identity as a visible row.
   | 'branch'
+  // Execution host context shown as a compact pill on workspace cards.
+  | 'host'
   // Task metadata on workspace cards; provider-specific persisted values kept for older profiles.
   | 'issue'
   | 'linear-issue'

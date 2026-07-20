@@ -4342,7 +4342,8 @@
           "automation": "자동화",
           "folderPathIdentity": "브랜치 / 폴더 경로",
           "cli": "Orca CLI",
-          "repository": "Repository"
+          "repository": "Repository",
+          "host": "Host"
         },
         "SshDisconnectedDialog": {
           "ca4a7892af": "연결 중...",

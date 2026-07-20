@@ -4361,7 +4361,8 @@
           "219ebf1961": "Nombre de rama",
           "folderPathIdentity": "Rama / ruta de carpeta",
           "cli": "Orca CLI",
-          "repository": "Repository"
+          "repository": "Repository",
+          "host": "Host"
         },
         "SshDisconnectedDialog": {
           "ca4a7892af": "Conectando...",
