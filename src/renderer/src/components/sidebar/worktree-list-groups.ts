@@ -44,10 +44,17 @@ import {
 } from '../../../../shared/execution-host'
 import { parseWslUncPath } from '../../../../shared/wsl-paths'
 import { isWindowsAbsolutePathLike } from '../../../../shared/cross-platform-path'
+import { getProjectIdentityKey } from '../../../../shared/project-host-setup-projection'
 
 export { branchName }
 
-export type WorktreeGroupBy = 'none' | 'workspace-status' | 'repo' | 'pr-status'
+export type WorktreeGroupBy = 'none' | 'workspace-status' | 'repo' | 'repository' | 'pr-status'
+
+export function isRepoSectionGrouping(
+  groupBy: WorktreeGroupBy
+): groupBy is Extract<WorktreeGroupBy, 'repo' | 'repository'> {
+  return groupBy === 'repo' || groupBy === 'repository'
+}
 export type PinnedWorktreeDisplayPolicy = 'single-location' | 'duplicate-in-groups'
 
 export function getPinnedWorktreeDisplayPolicy(
@@ -285,6 +292,49 @@ function getProjectGroupingForRepo(
     repo,
     projectId: project.id
   }
+}
+
+function getRepositoryLabel(identityKey: string): string {
+  const remoteIdentity = identityKey.replace(/^(?:github|git):/, '')
+  const segments = remoteIdentity.split('/').filter(Boolean)
+  return segments.length >= 2 ? segments.slice(-2).join('/') : remoteIdentity
+}
+
+function getRepositoryGroupingForRepo(
+  repoId: string,
+  repoMap: Map<string, Repo>
+): ProjectHeaderRevealTarget {
+  const repo = repoMap.get(repoId)
+  if (!repo) {
+    return {
+      key: `repository:repo:${repoId}`,
+      label: 'Unknown'
+    }
+  }
+  const identityKey = getProjectIdentityKey(repo)
+  if (identityKey === `repo:${repo.id}`) {
+    return {
+      key: `repository:repo:${repoId}`,
+      label: repo.displayName,
+      repo
+    }
+  }
+  return {
+    key: `repository:${identityKey}`,
+    label: getRepositoryLabel(identityKey),
+    repo
+  }
+}
+
+function getRepoSectionGroupingForRepo(
+  groupBy: Extract<WorktreeGroupBy, 'repo' | 'repository'>,
+  repoId: string,
+  repoMap: Map<string, Repo>,
+  projectIndex: ProjectGroupingIndex | null
+): ProjectHeaderRevealTarget {
+  return groupBy === 'repository'
+    ? getRepositoryGroupingForRepo(repoId, repoMap)
+    : getProjectGroupingForRepo(repoId, repoMap, projectIndex)
 }
 
 export function getProjectHeaderRevealTarget(
@@ -829,7 +879,7 @@ function getRenderedNaturalAnchorRepoIds({
     }
     return renderedRepoIds
   }
-  if (groupBy === 'repo') {
+  if (isRepoSectionGrouping(groupBy)) {
     for (const worktree of worktrees) {
       renderedRepoIds.add(worktree.repoId)
     }
@@ -1039,7 +1089,7 @@ export function buildRows(
   // Why: non-repo groupings have no repo section to nest an in-progress create
   // under, so surface them at the very top (where the old global strip sat)
   // rather than dropping them. Repo grouping nests them under their repo below.
-  if (groupBy !== 'repo' && pendingCreations.length > 0) {
+  if (!isRepoSectionGrouping(groupBy) && pendingCreations.length > 0) {
     for (const creation of pendingCreations) {
       result.push(buildPendingCreationRow(creation, repoMap))
     }
@@ -1066,7 +1116,7 @@ export function buildRows(
     collapsedGroups,
     renderedNaturalAnchorRepoIds,
     importedWorktreesByRepo,
-    groupBy !== 'repo',
+    !isRepoSectionGrouping(groupBy),
     result
   )
   if (groupBy === 'none') {
@@ -1099,8 +1149,8 @@ export function buildRows(
     let key: string
     let label: string
     let repo: Repo | undefined
-    if (groupBy === 'repo') {
-      const grouping = getProjectGroupingForRepo(w.repoId, repoMap, projectIndex)
+    if (isRepoSectionGrouping(groupBy)) {
+      const grouping = getRepoSectionGroupingForRepo(groupBy, w.repoId, repoMap, projectIndex)
       key = grouping.key
       label = grouping.label
       repo = grouping.repo
@@ -1121,9 +1171,9 @@ export function buildRows(
     group.items.push(w)
     addRepoIdToGroup(group, w.repoId)
   }
-  if (groupBy === 'repo') {
+  if (isRepoSectionGrouping(groupBy)) {
     for (const repoId of placeholderRepoIds) {
-      const grouping = getProjectGroupingForRepo(repoId, repoMap, projectIndex)
+      const grouping = getRepoSectionGroupingForRepo(groupBy, repoId, repoMap, projectIndex)
       if (!grouping.repo) {
         continue
       }
@@ -1142,9 +1192,9 @@ export function buildRows(
       }
     }
   }
-  if (groupBy === 'repo') {
+  if (isRepoSectionGrouping(groupBy)) {
     for (const [repoId, candidate] of importedWorktreesByRepo) {
-      const grouping = getProjectGroupingForRepo(repoId, repoMap, projectIndex)
+      const grouping = getRepoSectionGroupingForRepo(groupBy, repoId, repoMap, projectIndex)
       const key = grouping.key
       if (!grouped.has(key)) {
         grouped.set(key, {
@@ -1158,9 +1208,9 @@ export function buildRows(
       }
     }
   }
-  if (groupBy === 'repo') {
+  if (isRepoSectionGrouping(groupBy)) {
     for (const [repoId, candidate] of newExternalWorktreesInboxByRepo) {
-      const grouping = getProjectGroupingForRepo(repoId, repoMap, projectIndex)
+      const grouping = getRepoSectionGroupingForRepo(groupBy, repoId, repoMap, projectIndex)
       const key = grouping.key
       if (!grouped.has(key)) {
         // Why: the default policy removes pinned worktrees from natural groups,
@@ -1176,9 +1226,9 @@ export function buildRows(
       }
     }
   }
-  if (groupBy === 'repo') {
+  if (isRepoSectionGrouping(groupBy)) {
     for (const repoId of pendingByRepo.keys()) {
-      const grouping = getProjectGroupingForRepo(repoId, repoMap, projectIndex)
+      const grouping = getRepoSectionGroupingForRepo(groupBy, repoId, repoMap, projectIndex)
       const key = grouping.key
       if (!grouped.has(key)) {
         // Why: creating the first worktree in a repo leaves it with no group yet;
@@ -1241,58 +1291,57 @@ export function buildRows(
       const isCollapsed = collapsedGroups.has(key)
       const repo = group.repo
       const sourceRuntimeEnvironmentId = getGroupSourceRuntimeEnvironmentId(group, repoMap)
-      const header =
-        groupBy === 'repo'
-          ? {
-              type: 'header' as const,
-              key,
-              label: group.label,
-              count: group.items.length,
-              tone: PROJECT_GROUP_META.tone,
-              icon: PROJECT_GROUP_META.icon,
-              repo,
-              projectGroupDepth,
-              ...(sourceRuntimeEnvironmentId ? { sourceRuntimeEnvironmentId } : {})
-            }
-          : groupBy === 'workspace-status'
-            ? (() => {
-                const workspaceStatus =
-                  getWorkspaceStatusFromGroupKey(key, workspaceStatuses) ??
-                  workspaceStatuses[0]?.id ??
-                  'in-progress'
-                const definition = workspaceStatuses.find((status) => status.id === workspaceStatus)
-                const meta = getWorkspaceStatusVisualMeta(definition ?? workspaceStatus)
-                return {
-                  type: 'header' as const,
-                  key,
-                  label: definition?.label ?? workspaceStatus,
-                  count: group.items.length,
-                  tone: meta.tone,
-                  icon: meta.icon,
-                  hostWorktreeCounts: getHostWorktreeCounts(group.items, repoMap, defaultHostId),
-                  hostWorktreeIds: getHostWorktreeIds(group.items, repoMap, defaultHostId),
-                  worktreeIds: group.items.map((worktree) => worktree.id)
-                }
-              })()
-            : (() => {
-                const prGroup = key.replace(/^pr:/, '') as PRGroupKey
-                const meta = PR_GROUP_META[prGroup]
-                return {
-                  type: 'header' as const,
-                  key,
-                  label: meta.label,
-                  count: group.items.length,
-                  tone: meta.tone,
-                  icon: meta.icon,
-                  hostWorktreeCounts: getHostWorktreeCounts(group.items, repoMap, defaultHostId),
-                  hostWorktreeIds: getHostWorktreeIds(group.items, repoMap, defaultHostId),
-                  worktreeIds: group.items.map((worktree) => worktree.id)
-                }
-              })()
+      const header = isRepoSectionGrouping(groupBy)
+        ? {
+            type: 'header' as const,
+            key,
+            label: group.label,
+            count: group.items.length,
+            tone: PROJECT_GROUP_META.tone,
+            icon: PROJECT_GROUP_META.icon,
+            repo,
+            projectGroupDepth,
+            ...(sourceRuntimeEnvironmentId ? { sourceRuntimeEnvironmentId } : {})
+          }
+        : groupBy === 'workspace-status'
+          ? (() => {
+              const workspaceStatus =
+                getWorkspaceStatusFromGroupKey(key, workspaceStatuses) ??
+                workspaceStatuses[0]?.id ??
+                'in-progress'
+              const definition = workspaceStatuses.find((status) => status.id === workspaceStatus)
+              const meta = getWorkspaceStatusVisualMeta(definition ?? workspaceStatus)
+              return {
+                type: 'header' as const,
+                key,
+                label: definition?.label ?? workspaceStatus,
+                count: group.items.length,
+                tone: meta.tone,
+                icon: meta.icon,
+                hostWorktreeCounts: getHostWorktreeCounts(group.items, repoMap, defaultHostId),
+                hostWorktreeIds: getHostWorktreeIds(group.items, repoMap, defaultHostId),
+                worktreeIds: group.items.map((worktree) => worktree.id)
+              }
+            })()
+          : (() => {
+              const prGroup = key.replace(/^pr:/, '') as PRGroupKey
+              const meta = PR_GROUP_META[prGroup]
+              return {
+                type: 'header' as const,
+                key,
+                label: meta.label,
+                count: group.items.length,
+                tone: meta.tone,
+                icon: meta.icon,
+                hostWorktreeCounts: getHostWorktreeCounts(group.items, repoMap, defaultHostId),
+                hostWorktreeIds: getHostWorktreeIds(group.items, repoMap, defaultHostId),
+                worktreeIds: group.items.map((worktree) => worktree.id)
+              }
+            })()
 
       result.push(header)
       if (!isCollapsed) {
-        if (groupBy === 'repo') {
+        if (isRepoSectionGrouping(groupBy)) {
           const repoIds =
             group.repoIds.size > 0
               ? [...group.repoIds]
@@ -1322,12 +1371,13 @@ export function buildRows(
             }
           }
         }
-        const items = groupBy === 'repo' ? orderMainWorktreeFirst(group.items) : group.items
-        const hostContextLabelByRepoId =
-          groupBy === 'repo'
-            ? getMixedHostContextLabels(group, repoMap, projectIndex, hostLabelById)
-            : undefined
-        if (groupBy === 'repo') {
+        const items = isRepoSectionGrouping(groupBy)
+          ? orderMainWorktreeFirst(group.items)
+          : group.items
+        const hostContextLabelByRepoId = isRepoSectionGrouping(groupBy)
+          ? getMixedHostContextLabels(group, repoMap, projectIndex, hostLabelById)
+          : undefined
+        if (isRepoSectionGrouping(groupBy)) {
           appendWorktreeRows(result, items, repoMap, lineageById, worktreeMap, {
             nestLineage,
             collapsedGroups,
@@ -1491,8 +1541,9 @@ export function getGroupKeyForWorktree(
   if (groupBy === 'workspace-status') {
     return getWorkspaceStatusGroupKey(getWorkspaceStatus(worktree, workspaceStatuses))
   }
-  if (groupBy === 'repo') {
-    return getProjectGroupingForRepo(
+  if (isRepoSectionGrouping(groupBy)) {
+    return getRepoSectionGroupingForRepo(
+      groupBy,
       worktree.repoId,
       repoMap,
       buildProjectGroupingIndex(projectGrouping)

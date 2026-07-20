@@ -45,6 +45,20 @@ describe('getEmptyProjectPlaceholderRepoIds', () => {
     ).toEqual([repo.id])
   })
 
+  it('returns empty repo placeholders in repository grouping', () => {
+    expect(
+      Array.from(
+        getEmptyProjectPlaceholderRepoIds({
+          groupBy: 'repository',
+          repos: [repo],
+          worktreesByRepo: { [repo.id]: [] },
+          visibleWorktrees: [],
+          filterRepoIds: []
+        })
+      )
+    ).toEqual([repo.id])
+  })
+
   it('treats missing worktreesByRepo keys as empty for the current render', () => {
     expect(
       Array.from(

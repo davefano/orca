@@ -3153,7 +3153,7 @@ export type PersistedUIState = {
   rightSidebarExplorerView: RightSidebarExplorerView
   rightSidebarWidth: number
   markdownTocPanelWidth?: number
-  groupBy: 'none' | 'workspace-status' | 'repo' | 'pr-status'
+  groupBy: 'none' | 'workspace-status' | 'repo' | 'repository' | 'pr-status'
   sortBy: 'name' | 'smart' | 'recent' | 'repo' | 'manual'
   /** Project header ordering in `groupBy: 'repo'`, independent of `sortBy`: 'manual' uses persisted order + header drag, 'recent' by latest visible activity. */
   projectOrderBy: ProjectOrderBy
