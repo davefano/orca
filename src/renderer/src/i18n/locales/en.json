@@ -4369,7 +4369,8 @@
           "65a9820bd1": "Agent statuses",
           "219ebf1961": "Branch name",
           "folderPathIdentity": "Branch / folder path",
-          "cli": "Orca CLI"
+          "cli": "Orca CLI",
+          "repository": "Repository"
         },
         "SshDisconnectedDialog": {
           "ca4a7892af": "Connecting...",

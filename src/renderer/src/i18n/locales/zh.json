@@ -4304,7 +4304,8 @@
           "219ebf1961": "分支名称",
           "automation": "自动化",
           "folderPathIdentity": "分支 / 文件夹路径",
-          "cli": "Orca CLI"
+          "cli": "Orca CLI",
+          "repository": "Repository"
         },
         "SshDisconnectedDialog": {
           "ca4a7892af": "正在连接...",

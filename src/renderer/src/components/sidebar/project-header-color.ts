@@ -3,6 +3,7 @@ import { normalizeRepoBadgeColor } from '../../../../shared/repo-badge-color'
 
 const PROJECT_GROUP_HEADER_KEY_PREFIX = 'repo:'
 const PROVIDER_PROJECT_HEADER_KEY_PREFIX = 'project:'
+const REPOSITORY_HEADER_KEY_PREFIX = 'repository:'
 
 export function resolveRepoHeaderColor(badgeColor: string | null | undefined): string {
   const normalizedBadgeColor = normalizeRepoBadgeColor(badgeColor)
@@ -22,11 +23,13 @@ export function resolveProjectGroupHeaderColor(args: {
 }): string | undefined {
   // Why: pinned/project-folder headers can appear while grouped by repo; only
   // actual project headers should inherit user-authored project colors.
-  if (
-    args.groupBy !== 'repo' ||
-    (!args.headerKey.startsWith(PROJECT_GROUP_HEADER_KEY_PREFIX) &&
-      !args.headerKey.startsWith(PROVIDER_PROJECT_HEADER_KEY_PREFIX))
-  ) {
+  const isProjectHeader =
+    args.groupBy === 'repo' &&
+    (args.headerKey.startsWith(PROJECT_GROUP_HEADER_KEY_PREFIX) ||
+      args.headerKey.startsWith(PROVIDER_PROJECT_HEADER_KEY_PREFIX))
+  const isRepositoryHeader =
+    args.groupBy === 'repository' && args.headerKey.startsWith(REPOSITORY_HEADER_KEY_PREFIX)
+  if (!isProjectHeader && !isRepositoryHeader) {
     return undefined
   }
   return resolveRepoHeaderColor(args.badgeColor)
