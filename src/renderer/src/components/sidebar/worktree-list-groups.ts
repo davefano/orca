@@ -39,6 +39,7 @@ import {
   LOCAL_EXECUTION_HOST_ID,
   getRepoExecutionHostId,
   getWorktreeExecutionHostId,
+  parseExecutionHostId,
   type ExecutionHostId
 } from '../../../../shared/execution-host'
 import { parseWslUncPath } from '../../../../shared/wsl-paths'
@@ -75,6 +76,8 @@ export type GroupHeaderRow = {
   hostWorktreeCounts?: ReadonlyMap<ExecutionHostId, number>
   hostWorktreeIds?: ReadonlyMap<ExecutionHostId, readonly string[]>
   worktreeIds?: readonly string[]
+  /** Runtime environment that authoritatively supplied every repo in this project row. */
+  sourceRuntimeEnvironmentId?: string
 }
 
 export type WorktreeRow = {
@@ -743,6 +746,29 @@ function getMixedWorktreeHostContextLabels(
   return uniqueHostIds.size > 1 ? labelsByWorktreeId : undefined
 }
 
+function getGroupSourceRuntimeEnvironmentId(
+  group: WorktreeGroupEntry,
+  repoMap: ReadonlyMap<string, Repo>
+): string | undefined {
+  const repoIds = group.repoIds.size > 0 ? group.repoIds : group.repo ? [group.repo.id] : []
+  let environmentId: string | undefined
+  for (const repoId of repoIds) {
+    const repo = repoMap.get(repoId)
+    if (!repo) {
+      return undefined
+    }
+    const parsedHost = parseExecutionHostId(getRepoExecutionHostId(repo))
+    if (parsedHost?.kind !== 'runtime') {
+      return undefined
+    }
+    if (environmentId && environmentId !== parsedHost.environmentId) {
+      return undefined
+    }
+    environmentId = parsedHost.environmentId
+  }
+  return environmentId
+}
+
 function getHostWorktreeCounts(
   worktrees: readonly Worktree[],
   repoMap: Map<string, Repo>,
@@ -1234,6 +1260,7 @@ export function buildRows(
     for (const [key, group] of groupsToAppend) {
       const isCollapsed = collapsedGroups.has(key)
       const repo = group.repo
+      const sourceRuntimeEnvironmentId = getGroupSourceRuntimeEnvironmentId(group, repoMap)
       const header =
         groupBy === 'repo'
           ? {
@@ -1244,7 +1271,8 @@ export function buildRows(
               tone: PROJECT_GROUP_META.tone,
               icon: PROJECT_GROUP_META.icon,
               repo,
-              projectGroupDepth
+              projectGroupDepth,
+              ...(sourceRuntimeEnvironmentId ? { sourceRuntimeEnvironmentId } : {})
             }
           : groupBy === 'workspace-status'
             ? (() => {

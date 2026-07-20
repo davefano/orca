@@ -1986,6 +1986,71 @@ describe('buildRows with pinned worktrees', () => {
   })
 })
 
+describe('buildRows server provenance', () => {
+  it('marks project headers sourced entirely from an Orca runtime', () => {
+    const runtimeRepo: Repo = {
+      ...repo,
+      id: 'runtime-repo',
+      executionHostId: 'runtime:ultra-magnus'
+    }
+    const runtimeWorktree: Worktree = {
+      ...worktree,
+      id: 'runtime-worktree',
+      repoId: runtimeRepo.id
+    }
+
+    const rows = buildRows(
+      'repo',
+      [runtimeWorktree],
+      new Map([[runtimeRepo.id, runtimeRepo]]),
+      null,
+      new Set()
+    )
+
+    expect(rows[0]).toMatchObject({
+      type: 'header',
+      sourceRuntimeEnvironmentId: 'ultra-magnus'
+    })
+  })
+
+  it('does not mark a project header as server-sourced when it mixes local and runtime repos', () => {
+    const runtimeRepo: Repo = {
+      ...remoteRepo,
+      executionHostId: 'runtime:ultra-magnus',
+      connectionId: null
+    }
+    const runtimeWorktree = { ...remoteWorktree, repoId: runtimeRepo.id }
+    const rows = buildRows(
+      'repo',
+      [worktree, runtimeWorktree],
+      new Map([
+        [repo.id, repo],
+        [runtimeRepo.id, runtimeRepo]
+      ]),
+      null,
+      new Set(),
+      undefined,
+      undefined,
+      undefined,
+      {},
+      new Map([
+        [worktree.id, worktree],
+        [runtimeWorktree.id, runtimeWorktree]
+      ]),
+      false,
+      undefined,
+      [],
+      new Set(),
+      new Map(),
+      new Map(),
+      [],
+      { projects: [project], projectHostSetups }
+    )
+
+    expect(rows[0]).not.toHaveProperty('sourceRuntimeEnvironmentId')
+  })
+})
+
 describe('buildRows project grouping order', () => {
   const repoA: Repo = { ...repo, id: 'repo-a', displayName: 'alpha' }
   const repoB: Repo = { ...repo, id: 'repo-b', displayName: 'beta' }

@@ -78,7 +78,7 @@ function mergeProjectHostSetupProjection(
     return cachedProjection
   }
   const derived = getCachedProjectHostSetupProjection(repos)
-  const normalized = normalizeHydratedProjectHostSetupProjection(repos, projects, setups, derived)
+  const normalized = normalizeHydratedProjectHostSetupProjection(repos, projects, setups)
   // Why: older runtimes/profiles may hydrate empty or partial project/setup arrays
   // beside legacy repos. Keep repo-backed compatibility rows visible in that case.
   const projection = {
@@ -158,8 +158,7 @@ export function getProjectHostSetupProjectionFromState(
     const normalized = normalizeHydratedProjectHostSetupProjection(
       state.repos,
       state.projects as Project[],
-      state.projectHostSetups as ProjectHostSetup[],
-      derived
+      state.projectHostSetups as ProjectHostSetup[]
     )
     if (normalized.changed) {
       // Why: this is a zustand selector compared with Object.is, so the merged
