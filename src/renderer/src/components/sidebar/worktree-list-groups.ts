@@ -884,7 +884,10 @@ function withRepoSectionDisplayLabels(entries: readonly OrderedGroupEntry[]): Or
   const labelsByPath = getRepoDisplayLabelsByPath(repos)
   return entries.map(([key, group]) => [
     key,
-    group.repo
+    // Why: project grouping already supplies the authoritative project or host
+    // setup label. Path disambiguation is only for legacy repo groups; applying
+    // it here made the first host setup overwrite a server-published project name.
+    group.repo && !key.startsWith('project:')
       ? { ...group, label: labelsByPath.get(getRepoDisplayLabelKey(group.repo)) ?? group.label }
       : group
   ])
