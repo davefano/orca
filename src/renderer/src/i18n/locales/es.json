@@ -4170,7 +4170,8 @@
           "2d74665a56": "Puertos",
           "65a9820bd1": "Estados de Agents",
           "219ebf1961": "Nombre de rama",
-          "folderPathIdentity": "Rama / ruta de carpeta"
+          "folderPathIdentity": "Rama / ruta de carpeta",
+          "repository": "Repository"
         },
         "SshDisconnectedDialog": {
           "ca4a7892af": "Conectando...",
