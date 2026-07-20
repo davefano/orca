@@ -174,4 +174,46 @@ describe('WorktreeCard pinned repo icon', () => {
     },
     WORKTREE_CARD_IMPORT_TIMEOUT_MS
   )
+
+  it(
+    'shows the host context pill when the Host property is enabled',
+    async () => {
+      settings = { compactWorktreeCards: false }
+      worktreeCardProperties = ['host']
+      const { default: WorktreeCard } = await import('./WorktreeCard')
+
+      const markup = renderToStaticMarkup(
+        <WorktreeCard
+          worktree={makeWorktree({ isPinned: false })}
+          repo={makeRepo()}
+          isActive={false}
+          hostContextLabel="Wheeljack"
+        />
+      )
+
+      expect(markup).toContain('Wheeljack')
+    },
+    WORKTREE_CARD_IMPORT_TIMEOUT_MS
+  )
+
+  it(
+    'hides the host context pill when the Host property is disabled',
+    async () => {
+      settings = { compactWorktreeCards: false }
+      worktreeCardProperties = []
+      const { default: WorktreeCard } = await import('./WorktreeCard')
+
+      const markup = renderToStaticMarkup(
+        <WorktreeCard
+          worktree={makeWorktree({ isPinned: false })}
+          repo={makeRepo()}
+          isActive={false}
+          hostContextLabel="Wheeljack"
+        />
+      )
+
+      expect(markup).not.toContain('Wheeljack')
+    },
+    WORKTREE_CARD_IMPORT_TIMEOUT_MS
+  )
 })

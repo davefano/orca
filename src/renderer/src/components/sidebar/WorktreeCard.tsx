@@ -1174,7 +1174,8 @@ const WorktreeCard = React.memo(function WorktreeCard({
     showRepoIdentityInTitle && !!repo && !hideRepoBadge && !isFolder && !showPinnedRepoIcon
   const showRepoBadgeInMetaRow =
     !showRepoIdentityInTitle && !!repo && !hideRepoBadge && !showPinnedRepoIcon
-  const showHostContextBadge = !compactCards && !!hostContextLabel
+  const showHostContextBadge =
+    !compactCards && cardProps.includes('host') && Boolean(hostContextLabel)
   const showDetachedHeadInMetaRow = !compactCards && !isFolder && detachedHeadDisplay !== null
   const showBranch =
     !isFolder &&

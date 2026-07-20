@@ -48,9 +48,9 @@ describe('worktree card properties', () => {
   })
 
   it('normalizes fixed and legacy properties while preserving selected properties', () => {
-    expect(normalizeWorktreeCardProperties(['ci', 'branch', 'pr', 'automation', 'unread'])).toEqual(
-      ['status', 'unread', 'ci', 'branch', 'pr', 'automation']
-    )
+    expect(
+      normalizeWorktreeCardProperties(['ci', 'branch', 'host', 'pr', 'automation', 'unread'])
+    ).toEqual(['status', 'unread', 'ci', 'branch', 'host', 'pr', 'automation'])
   })
 
   it('returns combined mode update payloads', () => {
