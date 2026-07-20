@@ -49,6 +49,12 @@ function makeSession(overrides: Partial<UnifiedSessionRow>): UnifiedSessionRow {
     cpu: 1,
     memory: 100,
     hasLocalSamples: true,
+    connectionId: null,
+    hostLabel: null,
+    relayPtyId: null,
+    originLeafId: null,
+    originSource: null,
+    orphanReason: null,
     ...overrides
   }
 }
@@ -95,6 +101,8 @@ describe('resource manager row presentation', () => {
           onToggle={() => {}}
           onNavigate={() => {}}
           onDelete={() => {}}
+          onAttachSession={() => {}}
+          onAttachSessionToNewPane={() => {}}
           onKillSession={() => {}}
           navigateToTab={() => {}}
         />
@@ -132,6 +140,98 @@ describe('resource manager row presentation', () => {
     )
 
     expect(container.querySelector('button[aria-label="Kill session orphan-a"]')).not.toBeNull()
+  })
+
+  it('shows detached session diagnostics', () => {
+    renderWorktreeRow(
+      makeWorktree({
+        sessions: [
+          makeSession({
+            sessionId: 'ssh:ssh-bumblebee@@pty-4',
+            bound: false,
+            tabId: null,
+            cpu: null,
+            memory: null,
+            connectionId: 'ssh-bumblebee',
+            hostLabel: 'Bumblebee',
+            relayPtyId: 'pty-4',
+            originLeafId: 'leaf-1',
+            originSource: 'layout-wake',
+            orphanReason: 'live PTY has a workspace but no renderer pane binding'
+          })
+        ]
+      })
+    )
+
+    expect(container.textContent).toContain('Detached')
+    expect(container.textContent).toContain('Bumblebee · pty-4')
+    expect(container.textContent).toContain('leaf leaf-1')
+    expect(container.textContent).toContain('live PTY has a workspace but no renderer pane binding')
+  })
+
+  it('shows restore attach for detached sessions with a recoverable origin', () => {
+    renderWorktreeRow(
+      makeWorktree({
+        sessions: [
+          makeSession({
+            sessionId: 'ssh:ssh-bumblebee@@pty-4',
+            bound: false,
+            tabId: 'tab-1',
+            originLeafId: 'leaf-1'
+          })
+        ]
+      })
+    )
+
+    expect(
+      container.querySelector('button[aria-label="Attach session ssh:ssh-bumblebee@@pty-4"]')
+    ).not.toBeNull()
+  })
+
+  it('offers a new-pane attach for detached sessions without a saved origin', () => {
+    renderWorktreeRow(
+      makeWorktree({
+        sessions: [
+          makeSession({
+            sessionId: 'ssh:ssh-bumblebee@@pty-5',
+            bound: false,
+            tabId: null,
+            originLeafId: null
+          })
+        ]
+      })
+    )
+
+    expect(
+      container.querySelector(
+        'button[aria-label="Attach session ssh:ssh-bumblebee@@pty-5 to new pane"]'
+      )
+    ).not.toBeNull()
+    expect(container.textContent).not.toContain('No origin')
+  })
+
+  it('keeps unattributed detached sessions close-only when no workspace is known', () => {
+    renderWorktreeRow(
+      makeWorktree({
+        worktreeId: ORPHAN_WORKTREE_ID,
+        worktreeName: 'Orphaned terminals',
+        sessions: [
+          makeSession({
+            sessionId: 'ssh:ssh-unknown@@pty-5',
+            bound: false,
+            tabId: null,
+            originLeafId: null
+          })
+        ]
+      })
+    )
+
+    expect(
+      container.querySelector(
+        'button[aria-label="Attach session ssh:ssh-unknown@@pty-5 to new pane"]'
+      )
+    ).toBeNull()
+    expect(container.textContent).toContain('No origin')
   })
 
   it('shows browsers as read-only workspace resources', () => {
