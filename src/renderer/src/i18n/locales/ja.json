@@ -4366,7 +4366,8 @@
           "219ebf1961": "ブランチ名",
           "automation": "自動化",
           "folderPathIdentity": "ブランチ / フォルダパス",
-          "cli": "Orca CLI"
+          "cli": "Orca CLI",
+          "repository": "Repository"
         },
         "SshTargetRow": {
           "4677394048": "接続中…",
