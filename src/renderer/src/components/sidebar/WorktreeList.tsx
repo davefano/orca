@@ -29,7 +29,6 @@ import type { AppState } from '@/store/types'
 import {
   getAllWorktreesFromState,
   useAllWorktrees,
-  useProjectDisplayNameRevision,
   useProjectHostSetupProjection,
   useRepoMap,
   useWorktreeMap
@@ -5537,13 +5536,12 @@ const WorktreeList = React.memo(function WorktreeList({
   // Why: manual header order is bound to state.repos; Recent/Smart derive order from the sorted worktree stream.
   const repos = useAppStore((s) => s.repos)
   const projectHostSetupProjection = useProjectHostSetupProjection()
-  const projectDisplayNameRevision = useProjectDisplayNameRevision()
   const projectGrouping = useMemo(
     () => ({
       projects: projectHostSetupProjection.projects,
       projectHostSetups: projectHostSetupProjection.setups
     }),
-    [projectDisplayNameRevision, projectHostSetupProjection]
+    [projectHostSetupProjection]
   )
   const projectGroups = useAppStore((s) => s.projectGroups ?? EMPTY_PROJECT_GROUPS)
   const folderWorkspaces = useAppStore((s) => s.folderWorkspaces)

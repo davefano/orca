@@ -179,7 +179,3 @@ export function getProjectHostSetupProjectionFromState(
   }
   return getCachedProjectHostSetupProjection(state.repos)
 }
-
-export function getProjectDisplayNameRevision(projects: readonly Project[] | undefined): string {
-  return JSON.stringify((projects ?? []).map((project) => [project.id, project.displayName]))
-}

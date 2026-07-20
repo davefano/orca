@@ -698,6 +698,7 @@ describe('buildRows with pinned worktrees', () => {
     ])
     expect(headers[0]).toMatchObject({
       key: 'project:github:stablyai/orca',
+      label: 'Orca',
       repo: { id: repo.id, badgeColor: repo.badgeColor }
     })
   })
