@@ -56,7 +56,7 @@ describe('SidebarGroupByToggle', () => {
     const setGroupBy = vi.fn()
     const container = await renderGroupByToggle({ groupBy: 'repo', setGroupBy })
     const repositoryButton = [...container.querySelectorAll('button')].find(
-      (button) => button.textContent === 'Repository'
+      (button) => button.textContent === 'Repo'
     )
 
     await act(async () => {

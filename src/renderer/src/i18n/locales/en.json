@@ -4372,7 +4372,7 @@
           "219ebf1961": "Branch name",
           "folderPathIdentity": "Branch / folder path",
           "cli": "Orca CLI",
-          "repository": "Repository"
+          "repository": "Repo"
         },
         "SshDisconnectedDialog": {
           "ca4a7892af": "Connecting...",

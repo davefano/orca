@@ -30,10 +30,7 @@ export const GROUP_BY_OPTIONS = [
   {
     id: 'repository',
     get label() {
-      return translate(
-        'auto.components.sidebar.SidebarWorkspaceOptionsMenu.repository',
-        'Repository'
-      )
+      return translate('auto.components.sidebar.SidebarWorkspaceOptionsMenu.repository', 'Repo')
     }
   }
 ] as const
