@@ -3,6 +3,12 @@ import { translate } from '@/i18n/i18n'
 
 export const PROPERTY_OPTIONS: { id: WorktreeCardProperty; label: string }[] = [
   {
+    id: 'host',
+    get label() {
+      return translate('auto.components.sidebar.SidebarWorkspaceOptionsMenu.host', 'Host')
+    }
+  },
+  {
     id: 'issue',
     get label() {
       return translate(
