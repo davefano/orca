@@ -175,4 +175,21 @@ describe('WorktreeCardDisplayMenuSection', () => {
     expect(container?.textContent).toContain('Branch / folder path')
     expect(container?.textContent).not.toContain('Branch name')
   })
+
+  it('offers Host as a toggleable card property', () => {
+    worktreeCardProperties = worktreeCardProperties.filter((property) => property !== 'host')
+    renderMenu()
+
+    const hostButton = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === 'Host'
+    )
+    expect(hostButton).not.toBeUndefined()
+    expect(hostButton?.dataset.checked).toBe('false')
+
+    act(() => {
+      hostButton?.click()
+    })
+
+    expect(setWorktreeCardProperties).toHaveBeenCalledWith([...worktreeCardProperties, 'host'])
+  })
 })

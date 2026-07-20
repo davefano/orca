@@ -28,6 +28,7 @@ const LegacyWorktreeCardProperty = z.enum([
   'unread',
   'ci',
   'branch',
+  'host',
   'issue',
   'linear-issue',
   'pr',

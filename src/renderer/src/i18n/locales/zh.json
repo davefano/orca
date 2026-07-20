@@ -4152,7 +4152,8 @@
           "219ebf1961": "分支名称",
           "automation": "自动化",
           "folderPathIdentity": "分支 / 文件夹路径",
-          "repository": "Repo"
+          "repository": "Repo",
+          "host": "Host"
         },
         "SshDisconnectedDialog": {
           "ca4a7892af": "正在连接...",

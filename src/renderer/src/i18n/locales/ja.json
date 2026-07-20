@@ -4152,7 +4152,8 @@
           "219ebf1961": "ブランチ名",
           "automation": "自動化",
           "folderPathIdentity": "ブランチ / フォルダパス",
-          "repository": "Repo"
+          "repository": "Repo",
+          "host": "Host"
         },
         "SshDisconnectedDialog": {
           "ca4a7892af": "接続中...",

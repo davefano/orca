@@ -43,6 +43,7 @@ const WORKTREE_CARD_PROPERTY_ORDER: WorktreeCardProperty[] = [
   'unread',
   'ci',
   'branch',
+  'host',
   'issue',
   'linear-issue',
   'pr',
