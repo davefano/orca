@@ -51,4 +51,19 @@ describe('SidebarGroupByToggle', () => {
     expect(noneButton).not.toBeUndefined()
     expect(setGroupBy).toHaveBeenCalledWith('none')
   })
+
+  it('offers canonical repository grouping separately from project grouping', async () => {
+    const setGroupBy = vi.fn()
+    const container = await renderGroupByToggle({ groupBy: 'repo', setGroupBy })
+    const repositoryButton = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Repository'
+    )
+
+    await act(async () => {
+      repositoryButton?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+    })
+
+    expect(repositoryButton).not.toBeUndefined()
+    expect(setGroupBy).toHaveBeenCalledWith('repository')
+  })
 })

@@ -4341,7 +4341,8 @@
           "219ebf1961": "ブランチ名",
           "automation": "自動化",
           "folderPathIdentity": "ブランチ / フォルダパス",
-          "cli": "Orca CLI"
+          "cli": "Orca CLI",
+          "repository": "Repository"
         },
         "SshDisconnectedDialog": {
           "ca4a7892af": "接続中...",
