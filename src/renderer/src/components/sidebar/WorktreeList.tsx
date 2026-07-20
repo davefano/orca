@@ -35,6 +35,7 @@ import {
 } from '@/store/selectors'
 import WorktreeCard, { type ActiveSurfaceVariant } from './WorktreeCard'
 import { WorktreeSidebarDropIndicator } from './WorktreeSidebarDropIndicator'
+import { OrcaServerSourceBadge } from './OrcaServerSourceBadge'
 import {
   getProjectGroupHeaderSectionEndByGroupId,
   getRepoHeaderSectionEndByRepoId
@@ -4342,41 +4343,12 @@ const VirtualizedWorktreeViewport = React.memo(function VirtualizedWorktreeViewp
                           {row.label}
                         </div>
                         {row.sourceRuntimeEnvironmentId ? (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span
-                                className="inline-flex min-w-0 max-w-28 shrink items-center gap-1 rounded border border-worktree-sidebar-border bg-worktree-sidebar-accent px-1 py-0.5 text-[9px] font-medium leading-none text-muted-foreground"
-                                aria-label={translate(
-                                  'auto.components.sidebar.WorktreeList.serverSourceLabel',
-                                  'From Orca server {{name}}',
-                                  {
-                                    name:
-                                      runtimeEnvironmentNameById.get(
-                                        row.sourceRuntimeEnvironmentId
-                                      ) ?? row.sourceRuntimeEnvironmentId
-                                  }
-                                )}
-                              >
-                                <Server className="size-2.5 shrink-0" />
-                                <span className="truncate">
-                                  {runtimeEnvironmentNameById.get(row.sourceRuntimeEnvironmentId) ??
-                                    row.sourceRuntimeEnvironmentId}
-                                </span>
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom" sideOffset={6}>
-                              {translate(
-                                'auto.components.sidebar.WorktreeList.serverSourceLabel',
-                                'From Orca server {{name}}',
-                                {
-                                  name:
-                                    runtimeEnvironmentNameById.get(
-                                      row.sourceRuntimeEnvironmentId
-                                    ) ?? row.sourceRuntimeEnvironmentId
-                                }
-                              )}
-                            </TooltipContent>
-                          </Tooltip>
+                          <OrcaServerSourceBadge
+                            name={
+                              runtimeEnvironmentNameById.get(row.sourceRuntimeEnvironmentId) ??
+                              row.sourceRuntimeEnvironmentId
+                            }
+                          />
                         ) : null}
                         <RepoForkIndicator upstream={row.repo?.upstream} />
                         <FolderPathStatusIndicator status={projectGroupPathStatus} />
