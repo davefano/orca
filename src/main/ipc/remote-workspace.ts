@@ -415,16 +415,18 @@ export function registerRemoteWorkspaceHandlers(
       if (!target) {
         return null
       }
-      const snapshot = await getRemoteSnapshot(target)
-      if (!snapshot) {
-        return null
-      }
-      const workspaceSession = args.session ?? store.getWorkspaceSession()
-      const localSession = exportSessionForTarget(store, target.id, workspaceSession)
-      return {
-        snapshot,
-        matchesLocalSession: remoteWorkspaceSessionMatchesSnapshot(snapshot, localSession)
-      }
+      return queueRemoteWorkspacePatch(target.id, async () => {
+        const snapshot = await getRemoteSnapshot(target)
+        if (!snapshot) {
+          return null
+        }
+        const workspaceSession = args.session ?? store.getWorkspaceSession()
+        const localSession = exportSessionForTarget(store, target.id, workspaceSession)
+        return {
+          snapshot,
+          matchesLocalSession: remoteWorkspaceSessionMatchesSnapshot(snapshot, localSession)
+        }
+      })
     }
   )
 
