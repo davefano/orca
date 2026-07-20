@@ -457,6 +457,7 @@ import type { AppStarSource } from '../shared/gh-star-source'
 import type {
   RemoteWorkspaceChangedEvent,
   RemoteWorkspaceConnectedClient,
+  RemoteWorkspaceInspection,
   RemoteWorkspacePatchResult,
   RemoteWorkspaceSnapshot
 } from '../shared/remote-workspace-types'
@@ -2408,6 +2409,10 @@ export type PreloadApi = {
   }
   remoteWorkspace: {
     get: (args: { targetId: string }) => Promise<RemoteWorkspaceSnapshot | null>
+    inspect: (args: {
+      targetId: string
+      session?: WorkspaceSessionState
+    }) => Promise<RemoteWorkspaceInspection | null>
     setForConnectedTargets: (args: {
       session?: WorkspaceSessionState
       hydratedTargetIds?: string[]

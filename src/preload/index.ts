@@ -2729,6 +2729,7 @@ const api = {
 
   remoteWorkspace: {
     get: (args) => ipcRenderer.invoke('remoteWorkspace:get', args),
+    inspect: (args) => ipcRenderer.invoke('remoteWorkspace:inspect', args),
     setForConnectedTargets: (args) =>
       ipcRenderer.invoke('remoteWorkspace:setForConnectedTargets', args),
     listEnabledConnectedTargets: () =>

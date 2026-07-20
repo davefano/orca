@@ -169,7 +169,8 @@ describe('remoteWorkspace:setForConnectedTargets', () => {
     vi.mocked(ipcMain.removeHandler).mockReset()
     getSshConnectionStoreMock.mockReset()
     getSshConnectionStoreMock.mockReturnValue({
-      listTargets: () => targets
+      listTargets: () => targets,
+      getTarget: (targetId: string) => targets.find((target) => target.id === targetId)
     })
     getRepoMock.mockReset()
     getWorkspaceSessionMock.mockReset()
@@ -232,6 +233,65 @@ describe('remoteWorkspace:setForConnectedTargets', () => {
     }
     return handler(null, args)
   }
+
+  async function callInspect(args: {
+    targetId: string
+    session?: WorkspaceSessionState
+  }): Promise<unknown> {
+    const handler = handlers.get('remoteWorkspace:inspect')
+    if (!handler) {
+      throw new Error('remoteWorkspace:inspect handler was never registered')
+    }
+    return handler(null, args)
+  }
+
+  it('inspects the latest relay snapshot without writing it', async () => {
+    const session: WorkspaceSessionState = {
+      ...baseSession,
+      activeRepoId: 'repo-target-1',
+      activeWorktreeId: 'repo-target-1::/remote/repo',
+      activeTabId: null
+    }
+    const request = vi.fn().mockResolvedValue(
+      snapshot({
+        activeWorktreePath: '/remote/repo',
+        activeTabId: null,
+        tabsByWorktreePath: {},
+        terminalLayoutsByTabId: {}
+      })
+    )
+    getActiveMultiplexerMock.mockReturnValue({ request })
+
+    await expect(callInspect({ targetId: 'target-1', session })).resolves.toMatchObject({
+      snapshot: { revision: 7 },
+      matchesLocalSession: true
+    })
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(request).toHaveBeenCalledWith('workspace.get', {
+      namespace: expect.any(String)
+    })
+    expect(request).not.toHaveBeenCalledWith('workspace.patch', expect.anything())
+  })
+
+  it('reports a real layout difference without modifying either side', async () => {
+    const request = vi.fn().mockResolvedValue(
+      snapshot({
+        activeWorktreePath: '/different',
+        activeTabId: null,
+        tabsByWorktreePath: {},
+        terminalLayoutsByTabId: {}
+      })
+    )
+    getActiveMultiplexerMock.mockReturnValue({ request })
+
+    await expect(
+      callInspect({ targetId: 'target-1', session: baseSession })
+    ).resolves.toMatchObject({
+      snapshot: { revision: 7 },
+      matchesLocalSession: false
+    })
+    expect(request).toHaveBeenCalledTimes(1)
+  })
 
   it('does not write without an explicit non-empty hydrated target set', async () => {
     await expect(callSetForConnectedTargets({ session: baseSession })).resolves.toEqual([])

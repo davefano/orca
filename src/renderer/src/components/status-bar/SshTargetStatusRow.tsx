@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { useMountedRef } from '@/hooks/useMountedRef'
 import { useAppStore } from '../../store'
+import { buildWorkspaceSessionPayload } from '../../lib/workspace-session'
 import { STATUS_LABELS, statusColor } from '../settings/SshTargetCard'
 import type { SshConnectionStatus } from '../../../../shared/ssh-types'
 import type { RemoteWorkspaceSyncStatus } from '../../store/slices/ssh'
@@ -62,6 +63,7 @@ export function SshTargetStatusRow({
   const [busy, setBusy] = useState(false)
   const mountedRef = useMountedRef()
   const recordFeatureInteraction = useAppStore((s) => s.recordFeatureInteraction)
+  const setRemoteWorkspaceSyncStatus = useAppStore((s) => s.setRemoteWorkspaceSyncStatus)
   const visibleSyncStatusLabel = syncStatusLabel(syncStatus)
 
   const handleConnect = useCallback(async () => {
@@ -100,6 +102,72 @@ export function SshTargetStatusRow({
     }
   }, [mountedRef, recordFeatureInteraction, targetId])
 
+  const handleRefreshWorkspace = useCallback(async () => {
+    setBusy(true)
+    setRemoteWorkspaceSyncStatus(targetId, {
+      ...syncStatus,
+      phase: 'pulling',
+      direction: 'pull',
+      message: translate(
+        'auto.components.status.bar.SshTargetStatusRow.refreshingWorkspace',
+        'Checking workspace state'
+      )
+    })
+    try {
+      const inspection = await window.api.remoteWorkspace.inspect({
+        targetId,
+        session: buildWorkspaceSessionPayload(useAppStore.getState())
+      })
+      if (!inspection) {
+        setRemoteWorkspaceSyncStatus(targetId, {
+          phase: 'offline',
+          direction: 'pull',
+          lastSyncedAt: Date.now(),
+          message: translate(
+            'auto.components.status.bar.SshTargetStatusRow.workspaceUnavailable',
+            'Remote workspace sync unavailable'
+          )
+        })
+        return
+      }
+      setRemoteWorkspaceSyncStatus(targetId, {
+        phase: inspection.matchesLocalSession ? 'synced' : 'conflict',
+        direction: 'pull',
+        revision: inspection.snapshot.revision,
+        updatedAt: inspection.snapshot.updatedAt,
+        lastSyncedAt: Date.now(),
+        message: inspection.matchesLocalSession
+          ? translate(
+              'auto.components.status.bar.SshTargetStatusRow.workspaceCurrent',
+              'Workspace is current'
+            )
+          : translate(
+              'auto.components.status.bar.SshTargetStatusRow.workspaceStillDiffers',
+              'Workspace still differs from the server'
+            )
+      })
+    } catch (err) {
+      setRemoteWorkspaceSyncStatus(targetId, {
+        phase: 'error',
+        direction: 'pull',
+        lastSyncedAt: Date.now(),
+        message: err instanceof Error ? err.message : 'Workspace refresh failed'
+      })
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : translate(
+              'auto.components.status.bar.SshTargetStatusRow.workspaceRefreshFailed',
+              'Workspace refresh failed'
+            )
+      )
+    } finally {
+      if (mountedRef.current) {
+        setBusy(false)
+      }
+    }
+  }, [mountedRef, setRemoteWorkspaceSyncStatus, syncStatus, targetId])
+
   return (
     <div className="flex items-center gap-2.5 px-2 py-1.5">
       <span className={`size-1.5 shrink-0 rounded-full ${statusColor(status)}`} />
@@ -132,6 +200,14 @@ export function SshTargetStatusRow({
       </div>
       {busy ? (
         <Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground" />
+      ) : syncStatus?.phase === 'conflict' || syncStatus?.phase === 'error' ? (
+        <button
+          type="button"
+          onClick={() => void handleRefreshWorkspace()}
+          className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-foreground hover:bg-accent/70"
+        >
+          {translate('auto.components.status.bar.SshTargetStatusRow.refreshWorkspace', 'Refresh')}
+        </button>
       ) : isReconnectable(status) ? (
         <button
           type="button"

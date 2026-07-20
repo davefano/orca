@@ -24,6 +24,11 @@ export type RemoteWorkspaceSnapshot = {
   session: RemoteWorkspaceSession
 }
 
+export type RemoteWorkspaceInspection = {
+  snapshot: RemoteWorkspaceSnapshot
+  matchesLocalSession: boolean
+}
+
 export type RemoteWorkspaceConnectedClient = {
   clientId: string
   name: string
