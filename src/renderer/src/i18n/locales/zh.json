@@ -3274,7 +3274,13 @@
             "a37e8c15d4": "Run kimi in a terminal on the computer running Orca and wait for it to start, then retry usage."
           },
           "SshTargetStatusRow": {
-            "sshHost": "SSH 主机"
+            "sshHost": "SSH 主机",
+            "refreshingWorkspace": "Checking workspace state",
+            "workspaceUnavailable": "Remote workspace sync unavailable",
+            "workspaceCurrent": "Workspace is current",
+            "workspaceStillDiffers": "Workspace still differs from the server",
+            "workspaceRefreshFailed": "Workspace refresh failed",
+            "refreshWorkspace": "Refresh"
           },
           "usagePercentageLabel": {
             "used": "已用 {{value0}}%",
@@ -4344,7 +4350,8 @@
           "hostDisconnected": "已断开连接",
           "failedNestWorkspace": "无法嵌套工作区",
           "sidebarRowMissing": "目标不再存在",
-          "failedUnnestWorkspace": "展开工作区失败"
+          "failedUnnestWorkspace": "展开工作区失败",
+          "serverSourceLabel": "From Orca server {{name}}"
         },
         "WorktreeMetaDialog": {
           "3db0a2a593": "取消",
