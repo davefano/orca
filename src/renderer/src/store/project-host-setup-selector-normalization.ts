@@ -11,11 +11,9 @@ export type NormalizedProjectHostSetupProjection = ProjectHostSetupProjection & 
 export function normalizeHydratedProjectHostSetupProjection(
   repos: readonly Repo[],
   projects: readonly Project[],
-  setups: readonly ProjectHostSetup[],
-  derived: ProjectHostSetupProjection
+  setups: readonly ProjectHostSetup[]
 ): NormalizedProjectHostSetupProjection {
   const repoById = new Map(repos.map((repo) => [repo.id, repo]))
-  const derivedProjectIds = new Set(derived.projects.map((project) => project.id))
   const projectIdByHydratedProjectId = new Map<string, string>()
   let changed = false
   const normalizedSetups = setups.map((setup) => {
@@ -31,20 +29,18 @@ export function normalizeHydratedProjectHostSetupProjection(
     projectIdByHydratedProjectId.set(setup.projectId, projectId)
     return { ...setup, projectId }
   })
-  const normalizedProjects = projects.flatMap((project) => {
+  const normalizedProjects = projects.map((project) => {
     const projectId = projectIdByHydratedProjectId.get(project.id)
     if (!projectId || projectId === project.id) {
-      return [project]
+      return project
     }
-    // Why: runtime-hosted copies of the same Git repo may hydrate path-scoped
-    // project ids. If the repo-derived project already exists, keep that bucket
-    // authoritative so VM copies group under the user's single project.
-    if (derivedProjectIds.has(projectId)) {
-      changed = true
-      return []
-    }
+    // Why: the server's project metadata is authoritative even when its
+    // path-scoped id normalizes to a repo-derived identity already known by the
+    // client. Keep the record under the normalized id so the selector overlay
+    // preserves the server's exact name instead of falling back to whichever
+    // host repo happened to be projected first.
     changed = true
-    return [{ ...project, id: projectId }]
+    return { ...project, id: projectId }
   })
   return { projects: normalizedProjects, setups: normalizedSetups, changed }
 }
