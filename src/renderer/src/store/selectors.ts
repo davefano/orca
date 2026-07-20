@@ -3,7 +3,10 @@ import { useShallow } from 'zustand/react/shallow'
 import type { Repo, Worktree, TerminalTab } from '../../../shared/types'
 import type { AppState } from './types'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
-import { getProjectHostSetupProjectionFromState } from './project-host-setup-selector'
+import {
+  getProjectDisplayNameRevision,
+  getProjectHostSetupProjectionFromState
+} from './project-host-setup-selector'
 import {
   getIndexedAllWorktrees as getCachedAllWorktrees,
   getIndexedRepoMap as getCachedRepoMap,
@@ -176,6 +179,8 @@ export const useRepoById = (repoId: string | null) =>
   useAppStore((s) => (repoId ? (getCachedRepoMap(s.repos).get(repoId) ?? null) : null))
 export const useProjectHostSetupProjection = () =>
   useAppStore((s) => getProjectHostSetupProjectionFromState(s))
+export const useProjectDisplayNameRevision = () =>
+  useAppStore((s) => getProjectDisplayNameRevision(s.projects))
 
 // ─── Worktrees ──────────────────────────────────────────────────────
 export const useActiveWorktreeId = () => useAppStore((s) => s.activeWorktreeId)

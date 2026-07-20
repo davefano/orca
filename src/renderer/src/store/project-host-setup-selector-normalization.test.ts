@@ -2,8 +2,24 @@ import { describe, expect, it } from 'vitest'
 import type { Project, ProjectHostSetup, Repo } from '../../../shared/types'
 import { getProjectHostSetupProjectionFromState } from './project-host-setup-selector'
 import { normalizeHydratedProjectHostSetupProjection } from './project-host-setup-selector-normalization'
+import { getProjectDisplayNameRevision } from './project-host-setup-selector'
 
 describe('normalizeHydratedProjectHostSetupProjection', () => {
+  it('tracks authoritative project name changes independently of array identity', () => {
+    const project: Project = {
+      id: 'github:teal-hq/teal',
+      displayName: 'Teal @ Optimus Prime',
+      badgeColor: '#14b8a6',
+      sourceRepoIds: ['optimus-repo', 'wheeljack-repo'],
+      createdAt: 1,
+      updatedAt: 1
+    }
+    const before = getProjectDisplayNameRevision([project])
+    project.displayName = 'Teal'
+
+    expect(getProjectDisplayNameRevision([project])).not.toBe(before)
+  })
+
   it('keeps authoritative server metadata when its project id normalizes to a derived identity', () => {
     const repo: Repo = {
       id: 'remote-teal',
