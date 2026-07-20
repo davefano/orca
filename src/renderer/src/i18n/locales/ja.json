@@ -4339,7 +4339,8 @@
           "automation": "自動化",
           "folderPathIdentity": "ブランチ / フォルダパス",
           "cli": "Orca CLI",
-          "repository": "Repository"
+          "repository": "Repository",
+          "host": "Host"
         },
         "SshTargetRow": {
           "4677394048": "接続中…",
