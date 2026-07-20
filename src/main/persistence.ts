@@ -757,6 +757,7 @@ function normalizeGroupBy(groupBy: unknown): PersistedState['ui']['groupBy'] {
     groupBy === 'none' ||
     groupBy === 'workspace-status' ||
     groupBy === 'repo' ||
+    groupBy === 'repository' ||
     groupBy === 'pr-status'
   ) {
     return groupBy

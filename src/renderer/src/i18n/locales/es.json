@@ -4357,7 +4357,8 @@
           "65a9820bd1": "Estados de Agents",
           "219ebf1961": "Nombre de rama",
           "folderPathIdentity": "Rama / ruta de carpeta",
-          "cli": "Orca CLI"
+          "cli": "Orca CLI",
+          "repository": "Repository"
         },
         "SshTargetRow": {
           "4677394048": "Conectando…",
