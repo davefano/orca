@@ -1356,6 +1356,15 @@ describe('Store', () => {
     expect(store.getUI().groupBy).toBe('workspace-status')
   })
 
+  it('preserves explicit repository grouping', async () => {
+    writeDataFile({
+      schemaVersion: 1,
+      ui: { groupBy: 'repository' }
+    })
+    const store = await createStore()
+    expect(store.getUI().groupBy).toBe('repository')
+  })
+
   it('defaults projectOrderBy to manual when absent, even with recent sortBy', async () => {
     writeDataFile({
       schemaVersion: 1,

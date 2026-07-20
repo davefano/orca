@@ -845,7 +845,7 @@ export type UISlice = {
   dismissUsagePercentageDisplayChangeNotice: () => void
   usageEmptyStateDismissed: boolean
   dismissUsageEmptyState: () => void
-  groupBy: 'none' | 'workspace-status' | 'repo' | 'pr-status'
+  groupBy: 'none' | 'workspace-status' | 'repo' | 'repository' | 'pr-status'
   setGroupBy: (g: UISlice['groupBy']) => void
   sortBy: 'name' | 'smart' | 'recent' | 'repo' | 'manual'
   setSortBy: (s: UISlice['sortBy']) => void
