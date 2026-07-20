@@ -461,6 +461,42 @@ describe('Store', () => {
     expect(persisted.projectHostSetups).toEqual(store.getProjectHostSetups())
   })
 
+  it('preserves the authoritative project name when repo compatibility records refresh', async () => {
+    const optimusRepo = makeRepo({
+      id: 'optimus-repo',
+      path: '/Users/alice/teal',
+      displayName: 'Teal @ Optimus Prime',
+      upstream: { owner: 'Teal-HQ', repo: 'teal' }
+    })
+    const wheeljackRepo = makeRepo({
+      id: 'wheeljack-repo',
+      path: '/Users/bob/teal',
+      displayName: 'Teal @ Wheeljack',
+      upstream: { owner: 'Teal-HQ', repo: 'teal' }
+    })
+    writeDataFile({
+      ...getDefaultPersistedState(testState.dir),
+      repos: [optimusRepo, wheeljackRepo],
+      projects: [
+        makeProject({
+          id: 'github:teal-hq/teal',
+          displayName: 'Teal',
+          sourceRepoIds: [optimusRepo.id, wheeljackRepo.id]
+        })
+      ]
+    })
+
+    const store = await createStore()
+
+    expect(store.getProjects()).toContainEqual(
+      expect.objectContaining({ id: 'github:teal-hq/teal', displayName: 'Teal' })
+    )
+    store.flush()
+    expect((readDataFile() as PersistedState).projects).toContainEqual(
+      expect.objectContaining({ id: 'github:teal-hq/teal', displayName: 'Teal' })
+    )
+  })
+
   it('preserves independent project host setup records on load', async () => {
     const independentProject = makeProject({
       id: 'cloud-project',
