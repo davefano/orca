@@ -8,7 +8,7 @@ export function getEmptyProjectPlaceholderRepoIds(args: {
   visibleWorktrees: readonly Worktree[]
   filterRepoIds: readonly string[]
 }): Set<string> {
-  if (args.groupBy !== 'repo') {
+  if (args.groupBy !== 'repo' && args.groupBy !== 'repository') {
     return new Set()
   }
 
@@ -22,7 +22,8 @@ export function getEmptyProjectPlaceholderRepoIds(args: {
     const hasNoWorktrees = (args.worktreesByRepo[repo.id]?.length ?? 0) === 0
     // Why: workspace filters hide cards, but must not rewrite the visible
     // membership of a persisted Project Group. #8865
-    const isFilteredProjectGroupMember = repo.projectGroupId != null && !visibleRepoIds.has(repo.id)
+    const isFilteredProjectGroupMember =
+      args.groupBy === 'repo' && repo.projectGroupId != null && !visibleRepoIds.has(repo.id)
     if (hasNoWorktrees || isFilteredProjectGroupMember) {
       placeholderRepoIds.add(repo.id)
     }

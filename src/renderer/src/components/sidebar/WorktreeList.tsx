@@ -90,6 +90,7 @@ import {
   buildRows,
   getProjectGroupHeaderKey,
   getGroupKeysForWorktree,
+  isRepoSectionGrouping,
   getLineageGroupKey,
   getPinnedWorktreeDisplayPolicy,
   type PinnedWorktreeDisplayPolicy
@@ -4133,7 +4134,7 @@ const VirtualizedWorktreeViewport = React.memo(function VirtualizedWorktreeViewp
                 index: vItem.index,
                 firstHeaderIndex
               })
-              const isRepoHeader = groupBy === 'repo' && row.repo !== undefined
+              const isRepoHeader = isRepoSectionGrouping(groupBy) && row.repo !== undefined
               const isProjectGroupHeader = groupBy === 'repo' && row.projectGroup !== undefined
               const projectIdForHeader = isRepoHeader ? row.repo!.id : undefined
               const projectGroupIdForHeader =
@@ -4888,7 +4889,7 @@ const VirtualizedWorktreeViewport = React.memo(function VirtualizedWorktreeViewp
                     onContextMenuSelect={onContextMenuSelect}
                     onCardDragStart={handleWorktreeCardDragStart}
                     onCardDragEnd={clearWorktreeDrag}
-                    hideRepoBadge={groupBy === 'repo'}
+                    hideRepoBadge={isRepoSectionGrouping(groupBy)}
                     // Why: pinned worktrees mix repos in one section, so only it needs the leading repo identity chip.
                     hostContextLabel={itemRow.hostContextLabel}
                     inPinnedSection={isPinnedOverlayRow}

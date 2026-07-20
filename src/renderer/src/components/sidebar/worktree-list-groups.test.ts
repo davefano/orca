@@ -537,6 +537,144 @@ describe('buildRows with pinned worktrees', () => {
     ])
   })
 
+  it('groups host setups by canonical Git remote without inheriting project names', () => {
+    const wheeljackRepo: Repo = {
+      ...repo,
+      id: 'wheeljack-teal',
+      displayName: 'Teal @ Wheeljack',
+      connectionId: 'wheeljack',
+      repoIcon: {
+        type: 'image',
+        src: 'https://github.com/Teal-HQ.png',
+        source: 'github',
+        label: 'Teal-HQ/teal'
+      },
+      gitRemoteIdentity: {
+        canonicalKey: 'github.com/teal-hq/teal',
+        remoteName: 'origin',
+        remoteUrl: 'git@github.com:Teal-HQ/teal.git'
+      }
+    }
+    const ironhideRepo: Repo = {
+      ...wheeljackRepo,
+      id: 'ironhide-teal',
+      path: '/Users/davidfano/workspaces/teal',
+      displayName: 'Teal @ Ironhide',
+      connectionId: 'ironhide',
+      gitRemoteIdentity: {
+        canonicalKey: 'GITHUB.COM/TEAL-HQ/TEAL',
+        remoteName: 'origin',
+        remoteUrl: 'https://github.com/Teal-HQ/teal.git'
+      }
+    }
+    const wheeljackWorktree: Worktree = {
+      ...worktree,
+      id: 'wt-wheeljack-teal',
+      repoId: wheeljackRepo.id,
+      path: '/Users/davidfano/workspaces/teal-wheeljack'
+    }
+    const ironhideWorktree: Worktree = {
+      ...worktree,
+      id: 'wt-ironhide-teal',
+      repoId: ironhideRepo.id,
+      path: '/Users/davidfano/workspaces/teal-ironhide'
+    }
+
+    const rows = buildRows(
+      'repository',
+      [wheeljackWorktree, ironhideWorktree],
+      new Map([
+        [wheeljackRepo.id, wheeljackRepo],
+        [ironhideRepo.id, ironhideRepo]
+      ]),
+      null,
+      new Set(),
+      undefined,
+      undefined,
+      undefined,
+      {},
+      new Map([
+        [wheeljackWorktree.id, wheeljackWorktree],
+        [ironhideWorktree.id, ironhideWorktree]
+      ])
+    )
+
+    expect(rows).toMatchObject([
+      {
+        type: 'header',
+        key: 'repository:github:teal-hq/teal',
+        label: 'teal-hq/teal',
+        count: 2
+      },
+      { type: 'item', worktree: { id: wheeljackWorktree.id }, hostContextLabel: 'wheeljack' },
+      { type: 'item', worktree: { id: ironhideWorktree.id }, hostContextLabel: 'ironhide' }
+    ])
+  })
+
+  it('keeps repositories without canonical Git identities separate', () => {
+    const secondRepo: Repo = { ...repo, id: 'repo-2', path: '/tmp/orca-copy' }
+    const secondWorktree: Worktree = {
+      ...worktree,
+      id: 'wt-2',
+      repoId: secondRepo.id,
+      path: '/tmp/orca-copy-feature'
+    }
+    const rows = buildRows(
+      'repository',
+      [worktree, secondWorktree],
+      new Map([
+        [repo.id, repo],
+        [secondRepo.id, secondRepo]
+      ]),
+      null,
+      new Set()
+    )
+
+    expect(rows.filter((row) => row.type === 'header')).toMatchObject([
+      { key: `repository:repo:${repo.id}` },
+      { key: `repository:repo:${secondRepo.id}` }
+    ])
+  })
+
+  it('keeps case-distinct self-hosted remote paths separate', () => {
+    const upperRepo: Repo = {
+      ...repo,
+      id: 'upper-repo',
+      gitRemoteIdentity: {
+        canonicalKey: 'git.company.test/Team/Sample-App',
+        remoteName: 'origin',
+        remoteUrl: 'git@git.company.test:Team/Sample-App.git'
+      }
+    }
+    const lowerRepo: Repo = {
+      ...repo,
+      id: 'lower-repo',
+      gitRemoteIdentity: {
+        canonicalKey: 'git.company.test/team/sample-app',
+        remoteName: 'origin',
+        remoteUrl: 'git@git.company.test:team/sample-app.git'
+      }
+    }
+    const rows = buildRows(
+      'repository',
+      [
+        { ...worktree, id: 'upper-wt', repoId: upperRepo.id },
+        { ...worktree, id: 'lower-wt', repoId: lowerRepo.id }
+      ],
+      new Map([
+        [upperRepo.id, upperRepo],
+        [lowerRepo.id, lowerRepo]
+      ]),
+      null,
+      new Set()
+    )
+
+    expect(rows.filter((row) => row.type === 'header')).toMatchObject([
+      { key: 'repository:git:git.company.test/Team/Sample-App' },
+      { key: 'repository:git:git.company.test/team/sample-app' }
+    ])
+  })
+
   it('keeps mixed-host project item order while inserting inbox rows before worktrees', () => {
     const localRepo: Repo = {
       ...repo,
