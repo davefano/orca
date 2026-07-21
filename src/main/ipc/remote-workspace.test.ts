@@ -19,6 +19,7 @@ const {
 }))
 
 vi.mock('electron', () => ({
+  app: { getPath: () => '/test/orca-dev' },
   ipcMain: {
     handle: vi.fn(),
     removeHandler: vi.fn()
@@ -36,9 +37,11 @@ vi.mock('./remote-workspace-events', () => ({
 
 import {
   _resetRemoteWorkspaceCachesForTests,
+  handleRemoteWorkspaceNotification,
   registerRemoteWorkspaceHandlers,
   remoteWorkspaceSessionMatchesSnapshot
 } from './remote-workspace'
+import { getRemoteWorkspaceNamespace } from './remote-workspace-namespace'
 
 function snapshot(session: RemoteWorkspaceSession, revision = 7): RemoteWorkspaceSnapshot {
   return {
@@ -154,7 +157,8 @@ describe('remoteWorkspace:setForConnectedTargets', () => {
   const getWorkspaceSessionMock = vi.fn<Store['getWorkspaceSession']>()
   const store = {
     getRepo: getRepoMock,
-    getWorkspaceSession: getWorkspaceSessionMock
+    getWorkspaceSession: getWorkspaceSessionMock,
+    getSettings: () => ({ telemetry: { installId: 'test-install' } })
   } as unknown as Store
 
   beforeEach(() => {
@@ -322,6 +326,64 @@ describe('remoteWorkspace:setForConnectedTargets', () => {
       })
     )
     expect(requestByTargetId.get('target-2')).toBeUndefined()
+  })
+
+  it('ignores workspace changes from another client namespace', () => {
+    const send = vi.fn()
+    const mainWindow = {
+      isDestroyed: () => false,
+      webContents: { send }
+    }
+    const ultraScope = 'ultra-client-scope'
+    const airScope = 'air-client-scope'
+    registerRemoteWorkspaceHandlers(store, () => mainWindow as never, {
+      clientWorkspaceScope: ultraScope
+    })
+
+    handleRemoteWorkspaceNotification('target-1', 'workspace.changed', {
+      snapshot: {
+        ...snapshot({
+          activeWorktreePath: '/remote/repo',
+          activeTabId: 'air-tab',
+          tabsByWorktreePath: {},
+          terminalLayoutsByTabId: {}
+        }),
+        namespace: getRemoteWorkspaceNamespace(targets[0]!, airScope)
+      },
+      sourceClientId: 'air-client'
+    })
+
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it('forwards workspace changes from this client namespace', () => {
+    const send = vi.fn()
+    const mainWindow = {
+      isDestroyed: () => false,
+      webContents: { send }
+    }
+    const ultraScope = 'ultra-client-scope'
+    registerRemoteWorkspaceHandlers(store, () => mainWindow as never, {
+      clientWorkspaceScope: ultraScope
+    })
+
+    handleRemoteWorkspaceNotification('target-1', 'workspace.changed', {
+      snapshot: {
+        ...snapshot({
+          activeWorktreePath: '/remote/repo',
+          activeTabId: 'ultra-tab',
+          tabsByWorktreePath: {},
+          terminalLayoutsByTabId: {}
+        }),
+        namespace: getRemoteWorkspaceNamespace(targets[0]!, ultraScope)
+      },
+      sourceClientId: 'ultra-client'
+    })
+
+    expect(send).toHaveBeenCalledWith(
+      'remoteWorkspace:changed',
+      expect.objectContaining({ targetId: 'target-1' })
+    )
   })
 
   it('can export from the persisted store session when no session argument is provided', async () => {
