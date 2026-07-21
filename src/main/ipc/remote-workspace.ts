@@ -1,6 +1,6 @@
 /* oxlint-disable max-lines -- Why: remote workspace IPC keeps snapshot normalization, relay compatibility, and handler registration together so revision/cache semantics stay auditable. */
 import { randomUUID } from 'node:crypto'
-import { ipcMain, type BrowserWindow } from 'electron'
+import { app, ipcMain, type BrowserWindow } from 'electron'
 import { hostname } from 'node:os'
 import { isDeepStrictEqual } from 'node:util'
 import type { Store } from '../persistence'
@@ -17,7 +17,10 @@ import type {
 import type { SshTarget } from '../../shared/ssh-types'
 import type { WorkspaceSessionState } from '../../shared/types'
 import { getRepoIdFromWorktreeId } from '../../shared/worktree-id'
-import { getRemoteWorkspaceNamespace } from './remote-workspace-namespace'
+import {
+  getRemoteWorkspaceClientScope,
+  getRemoteWorkspaceNamespace
+} from './remote-workspace-namespace'
 import { registerRemoteWorkspaceNotificationHandler } from './remote-workspace-events'
 
 const CLIENT_ID = randomUUID()
@@ -26,6 +29,7 @@ const SNAPSHOT_SCHEMA_VERSION = 1
 export const REMOTE_WORKSPACE_SNAPSHOT_CACHE_MAX_ENTRIES = 64
 
 let mainWindowGetter: (() => BrowserWindow | null) | null = null
+let remoteWorkspaceClientScope = 'uninitialized-client'
 const latestSnapshotByTargetId = new Map<string, RemoteWorkspaceSnapshot>()
 const remoteWorkspacePatchTailByTargetId = new Map<string, Promise<void>>()
 let unregisterRemoteWorkspaceNotifications: (() => void) | null = null
@@ -241,7 +245,7 @@ async function getRemoteSnapshot(target: SshTarget): Promise<RemoteWorkspaceSnap
   if (!mux) {
     return null
   }
-  const namespace = getRemoteWorkspaceNamespace(target)
+  const namespace = getRemoteWorkspaceNamespace(target, remoteWorkspaceClientScope)
   try {
     const raw = await mux.request('workspace.get', { namespace })
     const snapshot = normalizeSnapshot(raw, namespace)
@@ -286,7 +290,7 @@ async function patchRemoteWorkspaceSession(
   if (!mux) {
     return null
   }
-  const namespace = getRemoteWorkspaceNamespace(target)
+  const namespace = getRemoteWorkspaceNamespace(target, remoteWorkspaceClientScope)
   const current =
     getCachedRemoteWorkspaceSnapshot(target.id) ?? (await getRemoteSnapshot(target)) ?? undefined
   if (current && remoteWorkspaceSessionMatchesSnapshot(current, session)) {
@@ -367,8 +371,14 @@ export function handleRemoteWorkspaceNotification(
   if (!target) {
     return
   }
-  const namespace = getRemoteWorkspaceNamespace(target)
+  const namespace = getRemoteWorkspaceNamespace(target, remoteWorkspaceClientScope)
   const snapshot = normalizeSnapshot(params.snapshot, namespace)
+  if (snapshot.namespace !== namespace) {
+    // Why: relays broadcast workspace changes to every connection. Each Orca
+    // client owns a separate layout namespace, so another device's snapshot
+    // must never replace this client's panes and orphan its still-live PTYs.
+    return
+  }
   rememberRemoteWorkspaceSnapshot(targetId, snapshot)
   const event: RemoteWorkspaceChangedEvent = {
     targetId,
@@ -383,8 +393,17 @@ export function handleRemoteWorkspaceNotification(
 
 export function registerRemoteWorkspaceHandlers(
   store: Store,
-  getMainWindow: () => BrowserWindow | null
+  getMainWindow: () => BrowserWindow | null,
+  options?: { clientWorkspaceScope?: string }
 ): void {
+  const installId = store.getSettings().telemetry?.installId
+  remoteWorkspaceClientScope =
+    options?.clientWorkspaceScope ??
+    getRemoteWorkspaceClientScope({
+      hostname: CLIENT_NAME,
+      installId,
+      userDataPath: app.getPath('userData')
+    })
   mainWindowGetter = getMainWindow
   unregisterRemoteWorkspaceNotifications?.()
   unregisterRemoteWorkspaceNotifications = registerRemoteWorkspaceNotificationHandler(
@@ -491,6 +510,8 @@ export function registerRemoteWorkspaceHandlers(
         if (!mux) {
           continue
         }
+        // Presence stays in the shared target namespace so diagnostics can
+        // still report every connected Orca client while layouts stay private.
         const namespace = getRemoteWorkspaceNamespace(target)
         try {
           const raw = await mux.request('workspace.presence', {
