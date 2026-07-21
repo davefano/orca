@@ -19,6 +19,7 @@ const {
 }))
 
 vi.mock('electron', () => ({
+  app: { getPath: () => '/test/orca-dev' },
   ipcMain: {
     handle: vi.fn(),
     removeHandler: vi.fn()
@@ -70,7 +71,8 @@ describe('remoteWorkspace:setForConnectedTargets patch queue', () => {
   const muxByTargetId = new Map<string, { request: ReturnType<typeof vi.fn> }>()
   const getRepoMock = vi.fn<Store['getRepo']>()
   const store = {
-    getRepo: getRepoMock
+    getRepo: getRepoMock,
+    getSettings: () => ({ telemetry: { installId: 'test-install' } })
   } as unknown as Store
 
   const target: SshTarget = {

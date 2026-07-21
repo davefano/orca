@@ -1,12 +1,30 @@
 import { createHash } from 'node:crypto'
 import type { SshTarget } from '../../shared/ssh-types'
 
-export function getRemoteWorkspaceNamespace(target: SshTarget): string {
+export function getRemoteWorkspaceClientScope(args: {
+  hostname: string
+  installId?: string | null
+  userDataPath: string
+}): string {
   const stableKey = [
+    args.hostname.trim() || 'unknown-host',
+    args.installId?.trim() || 'missing-install-id',
+    args.userDataPath
+  ].join('\n')
+  return createHash('sha256').update(stableKey).digest('hex').slice(0, 32)
+}
+
+export function getRemoteWorkspaceNamespace(target: SshTarget, clientScope?: string): string {
+  const stableKeyParts = [
     target.configHost || target.host,
     target.host,
     String(target.port),
     target.username
-  ].join('\n')
+  ]
+  const normalizedClientScope = clientScope?.trim()
+  if (normalizedClientScope) {
+    stableKeyParts.push(normalizedClientScope)
+  }
+  const stableKey = stableKeyParts.join('\n')
   return createHash('sha256').update(stableKey).digest('hex').slice(0, 32)
 }
