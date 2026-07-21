@@ -40,6 +40,7 @@ import {
   getRepoExecutionHostId,
   getWorktreeExecutionHostId,
   parseExecutionHostId,
+  toSshExecutionHostId,
   type ExecutionHostId
 } from '../../../../shared/execution-host'
 import { parseWslUncPath } from '../../../../shared/wsl-paths'
@@ -749,15 +750,27 @@ function getRepoHostLabel(
   projectIndex: ProjectGroupingIndex | null,
   hostLabelById: ReadonlyMap<string, string> | undefined
 ): string | null {
+  const repo = repoMap.get(repoId)
   const setup = projectIndex?.setupByRepoId.get(repoId)
   if (setup) {
-    return hostLabelById?.get(setup.hostId) ?? getExecutionHostLabel(setup.hostId)
+    // Why: runtime mirrors are routed through the code server, but an SSH-backed
+    // repo still belongs to its published fleet host. Preserve that host in the
+    // card context instead of presenting the runtime wrapper as the repo host.
+    const setupHost = parseExecutionHostId(setup.hostId)
+    const hostId =
+      setupHost?.kind === 'runtime' && repo?.connectionId
+        ? toSshExecutionHostId(repo.connectionId)
+        : setup.hostId
+    return hostLabelById?.get(hostId) ?? getExecutionHostLabel(hostId)
   }
-  const repo = repoMap.get(repoId)
   if (!repo) {
     return null
   }
-  const hostId = getRepoExecutionHostId(repo)
+  const executionHost = parseExecutionHostId(repo.executionHostId)
+  const hostId =
+    executionHost?.kind === 'runtime' && repo.connectionId
+      ? toSshExecutionHostId(repo.connectionId)
+      : getRepoExecutionHostId(repo)
   return hostLabelById?.get(hostId) ?? getExecutionHostLabel(hostId)
 }
 
