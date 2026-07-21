@@ -6,19 +6,24 @@ vi.mock('electron', () => ({
   powerMonitor: { on: vi.fn(), off: vi.fn() }
 }))
 
-type ResumeListener = () => void
+type PowerListener = () => void
+type PowerEvent = 'suspend' | 'resume'
 
 function createResumeSource() {
-  const state: { listener: ResumeListener | null } = { listener: null }
+  const state: Record<PowerEvent, PowerListener | null> = { suspend: null, resume: null }
   const source = {
-    on: vi.fn((_event: 'resume', callback: ResumeListener) => {
-      state.listener = callback
+    on: vi.fn((event: PowerEvent, callback: PowerListener) => {
+      state[event] = callback
     }),
-    off: vi.fn((_event: 'resume', _callback: ResumeListener) => {
-      state.listener = null
+    off: vi.fn((event: PowerEvent, _callback: PowerListener) => {
+      state[event] = null
     })
   }
-  return { source, fireResume: () => state.listener?.() }
+  return {
+    source,
+    fireSuspend: () => state.suspend?.(),
+    fireResume: () => state.resume?.()
+  }
 }
 
 function createWindow(destroyed = false): {
@@ -47,6 +52,20 @@ describe('registerSystemResumeBroadcast', () => {
     expect(destroyedWindow.webContents.send).not.toHaveBeenCalled()
   })
 
+  it('records suspend and resume breadcrumbs around wake recovery', () => {
+    const { source, fireSuspend, fireResume } = createResumeSource()
+    const recordBreadcrumb = vi.fn()
+    registerSystemResumeBroadcast({
+      resumeSource: source,
+      recordBreadcrumb
+    })
+
+    fireSuspend()
+    fireResume()
+
+    expect(recordBreadcrumb.mock.calls).toEqual([['system_suspend'], ['system_resume']])
+  })
+
   it('stops broadcasting after unsubscribe', () => {
     const { source, fireResume } = createResumeSource()
     const window = createWindow()
@@ -58,7 +77,7 @@ describe('registerSystemResumeBroadcast', () => {
     unsubscribe()
     fireResume()
 
-    expect(source.off).toHaveBeenCalledTimes(1)
+    expect(source.off).toHaveBeenCalledTimes(2)
     expect(window.webContents.send).not.toHaveBeenCalled()
   })
 })
