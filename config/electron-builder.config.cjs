@@ -18,7 +18,7 @@ const { verifyPackagedPluginResources } = require('./scripts/verify-packaged-plu
 const isMacRelease = process.env.ORCA_MAC_RELEASE === '1'
 const isLinuxArm64Release = process.env.ORCA_LINUX_ARM64_RELEASE === '1'
 const localBuildVersion = isMacRelease ? undefined : process.env.ORCA_LOCAL_BUILD_VERSION
-const appId = 'com.stablyai.orca'
+const appId = 'com.teal.orcateal'
 const featureWallResources = {
   from: 'resources/onboarding/feature-wall',
   to: 'onboarding/feature-wall'
@@ -63,7 +63,7 @@ const winSpeechNativeResource = {
 /** @type {import('electron-builder').Configuration} */
 module.exports = {
   appId,
-  productName: 'Orca',
+  productName: 'OrcaTeal',
   ...(localBuildVersion ? { extraMetadata: { version: localBuildVersion } } : {}),
   directories: {
     buildResources: 'resources/build'
@@ -348,11 +348,11 @@ module.exports = {
     target: [
       {
         target: 'dmg',
-        arch: ['x64', 'arm64']
+        arch: ['arm64']
       },
       {
         target: 'zip',
-        arch: ['x64', 'arm64']
+        arch: ['arm64']
       }
     ]
   },
@@ -360,7 +360,7 @@ module.exports = {
   // silently downgrading to ad-hoc artifacts that look shippable in CI logs.
   forceCodeSigning: isMacRelease,
   dmg: {
-    artifactName: 'orca-macos-${arch}.${ext}'
+    artifactName: 'orcateal-macos-${arch}.${ext}'
   },
   linux: {
     // Why: Ubuntu desktop ships GNOME Orca as the `orca` package and /usr/bin/orca.
