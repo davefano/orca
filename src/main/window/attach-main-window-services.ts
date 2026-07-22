@@ -62,6 +62,9 @@ import {
 import { logStartupMilestone } from '../startup/startup-diagnostics'
 
 const UPDATER_SETUP_FALLBACK_MS = 15_000
+// Why: OrcaTeal is maintained and deployed from our source branch. Pointing
+// its updater at official Orca releases could silently replace the custom app.
+const ENABLE_AUTO_UPDATER = false
 
 // Why: a manual check can arrive before deferred setup runs, so entry points force this pending setup to configure the updater first.
 let pendingAutoUpdaterSetup: (() => void) | null = null
@@ -150,6 +153,10 @@ export function attachMainWindowServices(
       return
     }
     updaterSetupDone = true
+    if (!ENABLE_AUTO_UPDATER) {
+      logStartupMilestone('updater-disabled-custom-distribution')
+      return
+    }
     setupAutoUpdater(mainWindow, {
       getLastUpdateCheckAt: () => store.getUI().lastUpdateCheckAt,
       onBeforeQuit: async () => {
