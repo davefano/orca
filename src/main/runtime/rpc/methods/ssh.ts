@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import {
   connectRegisteredSshTarget,
+  getRegisteredSshPtyHealth,
   getRegisteredSshState,
   listRegisteredRemovedSshTargetLabels,
   listRegisteredSshTargets
@@ -16,6 +17,11 @@ export const SSH_METHODS: RpcMethod[] = [
     name: 'ssh.getState',
     params: SshTarget,
     handler: (params) => ({ state: getRegisteredSshState(params.targetId) ?? null })
+  }),
+  defineMethod({
+    name: 'ssh.getPtyHealth',
+    params: SshTarget,
+    handler: async (params) => ({ health: await getRegisteredSshPtyHealth(params.targetId) })
   }),
   defineMethod({
     name: 'ssh.connect',

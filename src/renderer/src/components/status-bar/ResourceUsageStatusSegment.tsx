@@ -36,6 +36,7 @@ import { runWorktreeDelete } from '../sidebar/delete-worktree-flow'
 import { useDaemonActions, DaemonActionDialog } from '../shared/useDaemonActions'
 import type { AppMemory, BrowserWorkspace, UsageValues, Worktree } from '../../../../shared/types'
 import { ORPHAN_WORKTREE_ID } from '../../../../shared/constants'
+import type { SshPtyHealthResult } from '../../../../shared/ssh-types'
 import { getRepoExecutionHostId, parseExecutionHostId } from '../../../../shared/execution-host'
 import { isFolderRepo } from '../../../../shared/repo-kind'
 import { isWorkspaceOldForCleanup } from '../../../../shared/workspace-cleanup'
@@ -81,7 +82,7 @@ import { canAttachSessionToOrigin } from './resource-session-origin-attachment'
 import { createClosedResourceSessionCountSelector } from './resource-session-count-selector'
 import { clampResourceManagerPosition } from './resource-manager-drag-bounds'
 import { translate } from '@/i18n/i18n'
-import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
+import { callRuntimeRpc, getActiveRuntimeTarget } from '@/runtime/runtime-rpc-client'
 import type { RuntimeTerminalListResult } from '../../../../shared/runtime-types'
 
 const POLL_MS = 2_000
@@ -882,6 +883,13 @@ export function ResourceUsageStatusSegment({
   const activeWorktreeId = useAppStore((s) => s.activeWorktreeId)
   const workspaceSpaceScannedAt = useAppStore((s) => s.workspaceSpaceAnalysis?.scannedAt ?? null)
   const workspaceSpaceScanning = useAppStore((s) => s.workspaceSpaceScanning)
+  const activeRuntimeEnvironmentId = useAppStore(
+    (s) => s.settings?.activeRuntimeEnvironmentId ?? null
+  )
+  const ptyHealthRuntimeTarget = useMemo(
+    () => getActiveRuntimeTarget({ activeRuntimeEnvironmentId }),
+    [activeRuntimeEnvironmentId]
+  )
 
   const [open, setOpen] = useState(false)
   const [floatingPosition, setFloatingPosition] = useState<FloatingPosition | null>(null)
@@ -895,6 +903,9 @@ export function ResourceUsageStatusSegment({
     []
   )
   const [sessionsError, setSessionsError] = useState(false)
+  const [sshPtyHealth, setSshPtyHealth] = useState<SshPtyHealthResult[]>([])
+  const [sshPtyHealthLoading, setSshPtyHealthLoading] = useState(false)
+  const sshPtyHealthRefreshSequenceRef = useRef(0)
   const [killConfirm, setKillConfirm] = useState<UnifiedSessionRow | null>(null)
   const [killing, setKilling] = useState(false)
   const [spaceScanSnapshot, setSpaceScanSnapshot] = useState<ResourceUsageSpaceScanSnapshot>(
@@ -1151,6 +1162,42 @@ export function ResourceUsageStatusSegment({
     }
   }, [mountedRef])
 
+  const refreshSshPtyHealth = useCallback(async () => {
+    const refreshSequence = ++sshPtyHealthRefreshSequenceRef.current
+    setSshPtyHealthLoading(true)
+    try {
+      const { targets } = await callRuntimeRpc<{ targets: { id: string }[] }>(
+        ptyHealthRuntimeTarget,
+        'ssh.listTargets',
+        null,
+        { timeoutMs: 10_000, suppressFeatureInteraction: true }
+      )
+      const settledResults = await Promise.allSettled(
+        targets.map(async (target) => {
+          const { health } = await callRuntimeRpc<{ health: SshPtyHealthResult }>(
+            ptyHealthRuntimeTarget,
+            'ssh.getPtyHealth',
+            { targetId: target.id },
+            { timeoutMs: 10_000, suppressFeatureInteraction: true }
+          )
+          return health
+        })
+      )
+      if (mountedRef.current && refreshSequence === sshPtyHealthRefreshSequenceRef.current) {
+        const results = settledResults.flatMap((result) =>
+          result.status === 'fulfilled' ? [result.value] : []
+        )
+        setSshPtyHealth(results.filter((result) => result.status === 'connected'))
+      }
+    } catch (error) {
+      console.error('[resource-usage] SSH PTY health failed', error)
+    } finally {
+      if (mountedRef.current && refreshSequence === sshPtyHealthRefreshSequenceRef.current) {
+        setSshPtyHealthLoading(false)
+      }
+    }
+  }, [mountedRef, ptyHealthRuntimeTarget])
+
   const daemonActions = useDaemonActions({
     onRestartSettled: () => {
       setSessionsError(false)
@@ -1189,6 +1236,7 @@ export function ResourceUsageStatusSegment({
     void fetchSnapshot()
     void refreshSessions()
     void refreshRuntimeTerminals()
+    void refreshSshPtyHealth()
     // Why: only memory polls on an interval; session inventory is explicit on open/action since it's expensive with many terminals.
     const memTimer = window.setInterval(() => {
       void fetchSnapshot()
@@ -1196,7 +1244,7 @@ export function ResourceUsageStatusSegment({
     return () => {
       window.clearInterval(memTimer)
     }
-  }, [open, fetchSnapshot, refreshSessions, refreshRuntimeTerminals])
+  }, [open, fetchSnapshot, refreshSessions, refreshRuntimeTerminals, refreshSshPtyHealth])
 
   const repoDisplayNameById = useMemo(() => {
     const map = new Map<string, string>()
@@ -1875,6 +1923,46 @@ export function ResourceUsageStatusSegment({
                     )}
               </span>
             )}
+          </div>
+        )}
+
+        {(sshPtyHealth.length > 0 || sshPtyHealthLoading) && (
+          <div className="border-b border-border px-3 py-2 text-[10px]">
+            <div className="mb-1.5 flex items-center justify-between uppercase tracking-wide text-muted-foreground">
+              <span>SSH PTY health</span>
+              <button
+                type="button"
+                onClick={() => void refreshSshPtyHealth()}
+                disabled={sshPtyHealthLoading}
+                className="rounded p-0.5 transition-colors hover:bg-accent disabled:opacity-40"
+                aria-label="Refresh SSH PTY health"
+              >
+                <RotateCw className={cn('size-3', sshPtyHealthLoading && 'animate-spin')} />
+              </button>
+            </div>
+            <div className="space-y-1">
+              {sshPtyHealth.map((result) => {
+                const health = result.health
+                const tone =
+                  health?.pressure === 'critical'
+                    ? 'text-destructive'
+                    : health?.pressure === 'warning'
+                      ? 'text-yellow-500'
+                      : 'text-muted-foreground'
+                return (
+                  <div key={result.targetId} className="flex items-center justify-between gap-2">
+                    <span className="truncate text-foreground">{result.label}</span>
+                    <span className={cn('shrink-0 tabular-nums', tone)}>
+                      {health && health.systemAllocated !== null && health.systemCapacity !== null
+                        ? `${health.systemAllocated}/${health.systemCapacity} PTYs · ${health.systemAvailable} free · ${health.relayOwned} Orca`
+                        : (result.error ??
+                          health?.diagnosticError ??
+                          `${health?.relayOwned ?? 0} Orca PTYs`)}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
 

@@ -13,7 +13,9 @@ import type {
   SshRepoReadoption,
   SshTarget,
   SshConnectionStatus,
-  SshConnectionState
+  SshConnectionState,
+  PtyHealthSnapshot,
+  SshPtyHealthResult
 } from '../../shared/ssh-types'
 import { SSH_TERMINATE_RECONNECT_REQUIRED } from '../../shared/constants'
 import { isRuntimeOwnedSshTargetId } from '../../shared/execution-host'
@@ -86,6 +88,26 @@ export async function connectRegisteredSshTarget(targetId: string): Promise<SshC
 
 export function getRegisteredSshState(targetId: string): SshConnectionState | undefined {
   return registeredGetSshState?.(targetId)
+}
+
+export async function getRegisteredSshPtyHealth(targetId: string): Promise<SshPtyHealthResult> {
+  const target = sshStore?.getTarget(targetId)
+  const status = getRegisteredSshState(targetId)?.status ?? 'disconnected'
+  const base = { targetId, label: target?.label ?? targetId, status }
+  const mux = activeSessions.get(targetId)?.getMux()
+  if (!mux || mux.isDisposed() || status !== 'connected') {
+    return { ...base, health: null, error: 'SSH relay is not connected' }
+  }
+  try {
+    const health = (await mux.request('pty.getHealth')) as PtyHealthSnapshot
+    return { ...base, health }
+  } catch (error) {
+    return {
+      ...base,
+      health: null,
+      error: error instanceof Error ? error.message : String(error)
+    }
+  }
 }
 
 /** Public targets for runtime RPC clients — same list the desktop renderer gets. */

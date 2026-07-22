@@ -6,11 +6,13 @@ import { SSH_METHODS } from './ssh'
 
 const {
   connectRegisteredSshTargetMock,
+  getRegisteredSshPtyHealthMock,
   getRegisteredSshStateMock,
   listRegisteredSshTargetsMock,
   listRegisteredRemovedSshTargetLabelsMock
 } = vi.hoisted(() => ({
   connectRegisteredSshTargetMock: vi.fn(),
+  getRegisteredSshPtyHealthMock: vi.fn(),
   getRegisteredSshStateMock: vi.fn(),
   listRegisteredSshTargetsMock: vi.fn(),
   listRegisteredRemovedSshTargetLabelsMock: vi.fn()
@@ -18,6 +20,7 @@ const {
 
 vi.mock('../../../ipc/ssh', () => ({
   connectRegisteredSshTarget: connectRegisteredSshTargetMock,
+  getRegisteredSshPtyHealth: getRegisteredSshPtyHealthMock,
   getRegisteredSshState: getRegisteredSshStateMock,
   listRegisteredSshTargets: listRegisteredSshTargetsMock,
   listRegisteredRemovedSshTargetLabels: listRegisteredRemovedSshTargetLabelsMock
@@ -60,6 +63,33 @@ describe('ssh RPC methods', () => {
 
     expect(connectRegisteredSshTargetMock).toHaveBeenCalledWith('ssh-1')
     expect(response).toMatchObject({ ok: true, result: { state } })
+  })
+
+  it('returns authoritative PTY health from the runtime host', async () => {
+    const health = {
+      targetId: 'ssh-1',
+      label: 'Wheeljack',
+      status: 'connected',
+      health: {
+        platform: 'darwin',
+        systemCapacity: 511,
+        systemAllocated: 490,
+        systemAvailable: 21,
+        relayOwned: 12,
+        relayCapacity: 50,
+        pressure: 'warning'
+      }
+    }
+    getRegisteredSshPtyHealthMock.mockResolvedValueOnce(health)
+    const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as OrcaRuntimeService
+    const dispatcher = new RpcDispatcher({ runtime, methods: SSH_METHODS })
+
+    const response = await dispatcher.dispatch(
+      makeRequest('ssh.getPtyHealth', { targetId: 'ssh-1' })
+    )
+
+    expect(getRegisteredSshPtyHealthMock).toHaveBeenCalledWith('ssh-1')
+    expect(response).toMatchObject({ ok: true, result: { health } })
   })
 
   it('returns null when the target has no registered state yet', async () => {
