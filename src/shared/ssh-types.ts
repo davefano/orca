@@ -142,6 +142,27 @@ export type SshMutationExpectation = {
   expectedSshConnectionGeneration?: number
 }
 
+export type PtyHealthPressure = 'normal' | 'warning' | 'critical' | 'unknown'
+
+export type PtyHealthSnapshot = {
+  platform: NodeJS.Platform
+  systemCapacity: number | null
+  systemAllocated: number | null
+  systemAvailable: number | null
+  relayOwned: number
+  relayCapacity: number
+  pressure: PtyHealthPressure
+  diagnosticError?: string
+}
+
+export type SshPtyHealthResult = {
+  targetId: string
+  label: string
+  status: SshConnectionStatus
+  health: PtyHealthSnapshot | null
+  error?: string
+}
+
 export type SshRemotePtyLeaseState = 'attached' | 'detached' | 'terminated' | 'expired'
 
 export type SshRemotePtyLease = {
