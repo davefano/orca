@@ -2,8 +2,11 @@ import { createHash } from 'node:crypto'
 import path from 'node:path'
 import type { AppIdentity } from '../../shared/app-identity'
 
-const BASE_APP_NAME = 'Orca'
-const BASE_APP_USER_MODEL_ID = 'com.stablyai.orca'
+// Why: OrcaTeal is a separately packaged daily-driver build. Its stable
+// identity keeps app data, Keychain storage, Dock/Spotlight identity, and
+// runtime ownership isolated from both official Orca and Orca Dev.
+const BASE_APP_NAME = 'OrcaTeal'
+const BASE_APP_USER_MODEL_ID = 'com.teal.orcateal'
 const MAX_LABEL_LENGTH = 80
 
 export type DevInstanceIdentity = AppIdentity & {

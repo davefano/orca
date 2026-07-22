@@ -181,6 +181,10 @@ export function configureDevUserDataPath(isDev: boolean): void {
   }
 
   if (!isDev) {
+    // Why: OrcaTeal is installed beside official Orca and Orca Dev. Electron
+    // otherwise derives `orca` from package.json and both apps contend for the
+    // same profile and single-instance lock despite distinct bundle IDs.
+    app.setPath('userData', join(app.getPath('appData'), 'orcateal'))
     return
   }
   const overrideUserDataPath = process.env.ORCA_DEV_USER_DATA_PATH

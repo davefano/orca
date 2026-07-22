@@ -51,8 +51,8 @@ const winSpeechNativeResource = {
 
 /** @type {import('electron-builder').Configuration} */
 module.exports = {
-  appId: 'com.stablyai.orca',
-  productName: 'Orca',
+  appId: 'com.teal.orcateal',
+  productName: 'OrcaTeal',
   directories: {
     buildResources: 'resources/build'
   },
@@ -290,11 +290,11 @@ module.exports = {
     target: [
       {
         target: 'dmg',
-        arch: ['x64', 'arm64']
+        arch: ['arm64']
       },
       {
         target: 'zip',
-        arch: ['x64', 'arm64']
+        arch: ['arm64']
       }
     ]
   },
@@ -302,7 +302,7 @@ module.exports = {
   // silently downgrading to ad-hoc artifacts that look shippable in CI logs.
   forceCodeSigning: isMacRelease,
   dmg: {
-    artifactName: 'orca-macos-${arch}.${ext}'
+    artifactName: 'orcateal-macos-${arch}.${ext}'
   },
   linux: {
     // Why: Ubuntu desktop ships GNOME Orca as the `orca` package and /usr/bin/orca.
