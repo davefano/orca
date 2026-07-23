@@ -36,6 +36,7 @@ import { runWorktreeDelete } from '../sidebar/delete-worktree-flow'
 import { useDaemonActions, DaemonActionDialog } from '../shared/useDaemonActions'
 import type { AppMemory, BrowserWorkspace, UsageValues, Worktree } from '../../../../shared/types'
 import { ORPHAN_WORKTREE_ID } from '../../../../shared/constants'
+import type { SshPtyHealthResult } from '../../../../shared/ssh-types'
 import { getRepoExecutionHostId, parseExecutionHostId } from '../../../../shared/execution-host'
 import { isFolderRepo } from '../../../../shared/repo-kind'
 import { isWorkspaceOldForCleanup } from '../../../../shared/workspace-cleanup'
@@ -49,6 +50,7 @@ import type {
   RuntimeTerminalAttribution
 } from './resource-usage-merge-types'
 import { WorkspaceSpaceCompactPanel } from './WorkspaceSpaceCompactPanel'
+import { SshPtyHealthPanel } from './SshPtyHealthPanel'
 import { STATUS_BAR_CONTEXT_MENU_EXEMPT_PROPS } from './status-bar-context-menu-policy'
 import {
   isResourceSessionActivationKey,
@@ -81,7 +83,7 @@ import { canAttachSessionToOrigin } from './resource-session-origin-attachment'
 import { createClosedResourceSessionCountSelector } from './resource-session-count-selector'
 import { clampResourceManagerPosition } from './resource-manager-drag-bounds'
 import { translate } from '@/i18n/i18n'
-import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
+import { callRuntimeRpc, getActiveRuntimeTarget } from '@/runtime/runtime-rpc-client'
 import type { RuntimeTerminalListResult } from '../../../../shared/runtime-types'
 
 const POLL_MS = 2_000
@@ -882,6 +884,13 @@ export function ResourceUsageStatusSegment({
   const activeWorktreeId = useAppStore((s) => s.activeWorktreeId)
   const workspaceSpaceScannedAt = useAppStore((s) => s.workspaceSpaceAnalysis?.scannedAt ?? null)
   const workspaceSpaceScanning = useAppStore((s) => s.workspaceSpaceScanning)
+  const activeRuntimeEnvironmentId = useAppStore(
+    (s) => s.settings?.activeRuntimeEnvironmentId ?? null
+  )
+  const ptyHealthRuntimeTarget = useMemo(
+    () => getActiveRuntimeTarget({ activeRuntimeEnvironmentId }),
+    [activeRuntimeEnvironmentId]
+  )
 
   const [open, setOpen] = useState(false)
   const [floatingPosition, setFloatingPosition] = useState<FloatingPosition | null>(null)
@@ -895,6 +904,9 @@ export function ResourceUsageStatusSegment({
     []
   )
   const [sessionsError, setSessionsError] = useState(false)
+  const [sshPtyHealth, setSshPtyHealth] = useState<SshPtyHealthResult[]>([])
+  const [sshPtyHealthLoading, setSshPtyHealthLoading] = useState(false)
+  const sshPtyHealthRefreshSequenceRef = useRef(0)
   const [killConfirm, setKillConfirm] = useState<UnifiedSessionRow | null>(null)
   const [killing, setKilling] = useState(false)
   const [spaceScanSnapshot, setSpaceScanSnapshot] = useState<ResourceUsageSpaceScanSnapshot>(
@@ -1151,6 +1163,54 @@ export function ResourceUsageStatusSegment({
     }
   }, [mountedRef])
 
+  const refreshSshPtyHealth = useCallback(async () => {
+    const refreshSequence = ++sshPtyHealthRefreshSequenceRef.current
+    setSshPtyHealthLoading(true)
+    try {
+      const { targets } = await callRuntimeRpc<{ targets: { id: string }[] }>(
+        ptyHealthRuntimeTarget,
+        'ssh.listTargets',
+        null,
+        { timeoutMs: 10_000, suppressFeatureInteraction: true }
+      )
+      const settledResults = await Promise.allSettled(
+        targets.map(async (target) => {
+          const { health } = await callRuntimeRpc<{ health: SshPtyHealthResult }>(
+            ptyHealthRuntimeTarget,
+            'ssh.getPtyHealth',
+            { targetId: target.id },
+            { timeoutMs: 10_000, suppressFeatureInteraction: true }
+          )
+          return health
+        })
+      )
+      if (mountedRef.current && refreshSequence === sshPtyHealthRefreshSequenceRef.current) {
+        const results = settledResults.flatMap((result) =>
+          result.status === 'fulfilled' ? [result.value] : []
+        )
+        setSshPtyHealth(results.filter((result) => result.status === 'connected'))
+      }
+    } catch (error) {
+      console.error('[resource-usage] SSH PTY health failed', error)
+    } finally {
+      if (mountedRef.current && refreshSequence === sshPtyHealthRefreshSequenceRef.current) {
+        setSshPtyHealthLoading(false)
+      }
+    }
+  }, [mountedRef, ptyHealthRuntimeTarget])
+
+  const pruneSshPtyOwner = useCallback(
+    async (targetId: string, ownerId: string): Promise<void> => {
+      await callRuntimeRpc(
+        ptyHealthRuntimeTarget,
+        'ssh.prunePtyOwner',
+        { targetId, ownerId },
+        { timeoutMs: 10_000, suppressFeatureInteraction: true }
+      )
+    },
+    [ptyHealthRuntimeTarget]
+  )
+
   const daemonActions = useDaemonActions({
     onRestartSettled: () => {
       setSessionsError(false)
@@ -1189,6 +1249,7 @@ export function ResourceUsageStatusSegment({
     void fetchSnapshot()
     void refreshSessions()
     void refreshRuntimeTerminals()
+    void refreshSshPtyHealth()
     // Why: only memory polls on an interval; session inventory is explicit on open/action since it's expensive with many terminals.
     const memTimer = window.setInterval(() => {
       void fetchSnapshot()
@@ -1196,7 +1257,7 @@ export function ResourceUsageStatusSegment({
     return () => {
       window.clearInterval(memTimer)
     }
-  }, [open, fetchSnapshot, refreshSessions, refreshRuntimeTerminals])
+  }, [open, fetchSnapshot, refreshSessions, refreshRuntimeTerminals, refreshSshPtyHealth])
 
   const repoDisplayNameById = useMemo(() => {
     const map = new Map<string, string>()
@@ -1877,6 +1938,13 @@ export function ResourceUsageStatusSegment({
             )}
           </div>
         )}
+
+        <SshPtyHealthPanel
+          results={sshPtyHealth}
+          loading={sshPtyHealthLoading}
+          onRefresh={() => void refreshSshPtyHealth()}
+          onPrune={pruneSshPtyOwner}
+        />
 
         {/* Why: fixed 420px height so the popover doesn't jump as worktrees expand/collapse or sessions change; inner tree owns its scroll. */}
         <div

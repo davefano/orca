@@ -6,21 +6,27 @@ import { SSH_METHODS } from './ssh'
 
 const {
   connectRegisteredSshTargetMock,
+  getRegisteredSshPtyHealthMock,
   getRegisteredSshStateMock,
   listRegisteredSshTargetsMock,
-  listRegisteredRemovedSshTargetLabelsMock
+  listRegisteredRemovedSshTargetLabelsMock,
+  pruneRegisteredSshPtyOwnerMock
 } = vi.hoisted(() => ({
   connectRegisteredSshTargetMock: vi.fn(),
+  getRegisteredSshPtyHealthMock: vi.fn(),
   getRegisteredSshStateMock: vi.fn(),
   listRegisteredSshTargetsMock: vi.fn(),
-  listRegisteredRemovedSshTargetLabelsMock: vi.fn()
+  listRegisteredRemovedSshTargetLabelsMock: vi.fn(),
+  pruneRegisteredSshPtyOwnerMock: vi.fn()
 }))
 
 vi.mock('../../../ipc/ssh', () => ({
   connectRegisteredSshTarget: connectRegisteredSshTargetMock,
+  getRegisteredSshPtyHealth: getRegisteredSshPtyHealthMock,
   getRegisteredSshState: getRegisteredSshStateMock,
   listRegisteredSshTargets: listRegisteredSshTargetsMock,
-  listRegisteredRemovedSshTargetLabels: listRegisteredRemovedSshTargetLabelsMock
+  listRegisteredRemovedSshTargetLabels: listRegisteredRemovedSshTargetLabelsMock,
+  pruneRegisteredSshPtyOwner: pruneRegisteredSshPtyOwnerMock
 }))
 
 function makeRequest(method: string, params?: unknown): RpcRequest {
@@ -60,6 +66,60 @@ describe('ssh RPC methods', () => {
 
     expect(connectRegisteredSshTargetMock).toHaveBeenCalledWith('ssh-1')
     expect(response).toMatchObject({ ok: true, result: { state } })
+  })
+
+  it('returns authoritative PTY health from the runtime host', async () => {
+    const health = {
+      targetId: 'ssh-1',
+      label: 'Wheeljack',
+      status: 'connected',
+      health: {
+        platform: 'darwin',
+        systemCapacity: 511,
+        systemAllocated: 490,
+        systemAvailable: 21,
+        relayOwned: 12,
+        relayCapacity: 50,
+        pressure: 'warning'
+      }
+    }
+    getRegisteredSshPtyHealthMock.mockResolvedValueOnce(health)
+    const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as OrcaRuntimeService
+    const dispatcher = new RpcDispatcher({ runtime, methods: SSH_METHODS })
+
+    const response = await dispatcher.dispatch(
+      makeRequest('ssh.getPtyHealth', { targetId: 'ssh-1' })
+    )
+
+    expect(getRegisteredSshPtyHealthMock).toHaveBeenCalledWith('ssh-1')
+    expect(response).toMatchObject({ ok: true, result: { health } })
+  })
+
+  it('prunes a freshly validated safe PTY owner through the runtime host', async () => {
+    const prune = {
+      owner: {
+        ownerId: '98022:Sat Jul 18 09:22:04 2026',
+        pid: 98022,
+        disposition: 'safe'
+      },
+      signaled: true
+    }
+    pruneRegisteredSshPtyOwnerMock.mockResolvedValueOnce(prune)
+    const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as OrcaRuntimeService
+    const dispatcher = new RpcDispatcher({ runtime, methods: SSH_METHODS })
+
+    const response = await dispatcher.dispatch(
+      makeRequest('ssh.prunePtyOwner', {
+        targetId: 'ssh-1',
+        ownerId: '98022:Sat Jul 18 09:22:04 2026'
+      })
+    )
+
+    expect(pruneRegisteredSshPtyOwnerMock).toHaveBeenCalledWith(
+      'ssh-1',
+      '98022:Sat Jul 18 09:22:04 2026'
+    )
+    expect(response).toMatchObject({ ok: true, result: { prune } })
   })
 
   it('returns null when the target has no registered state yet', async () => {

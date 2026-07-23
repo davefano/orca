@@ -47,6 +47,7 @@ import {
   type PtyIngressEmission
 } from '../shared/pty-startup-ingress'
 import { resolvePtyOwnerBackend, type PtyOwnerBackend } from '../shared/pty-owner-backend'
+import { collectPtyHealth, prunePtyOwner } from './pty-health'
 
 function isMissingNodePtyNativeBinding(error: unknown): boolean {
   return (
@@ -584,6 +585,19 @@ export class PtyHandler {
     this.dispatcher.onRequest('pty.hasChildProcesses', (p) => this.hasChildProcesses(p))
     this.dispatcher.onRequest('pty.getForegroundProcess', (p) => this.getForegroundProcess(p))
     this.dispatcher.onRequest('pty.listProcesses', () => this.listProcesses())
+    this.dispatcher.onRequest('pty.getHealth', () =>
+      collectPtyHealth({ relayOwned: this.ptys.size, relayCapacity: MAX_RELAY_PTY_SESSIONS })
+    )
+    this.dispatcher.onRequest('pty.pruneOwner', (p) => {
+      if (typeof p.ownerId !== 'string' || p.ownerId.length === 0) {
+        throw new Error('pty_owner_id_required')
+      }
+      return prunePtyOwner({
+        ownerId: p.ownerId,
+        relayOwned: this.ptys.size,
+        relayCapacity: MAX_RELAY_PTY_SESSIONS
+      })
+    })
     this.dispatcher.onRequest('pty.getDefaultShell', async () => resolveDefaultShell())
     this.dispatcher.onRequest('pty.serialize', (p) => this.serialize(p))
     this.dispatcher.onRequest('pty.revive', (p) => this.revive(p))
