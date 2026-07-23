@@ -1,24 +1,36 @@
 import { execFile as execFileCallback } from 'node:child_process'
 import { promisify } from 'node:util'
-import type { PtyHealthPressure, PtyHealthSnapshot } from '../shared/ssh-types'
+import type {
+  PtyHealthPressure,
+  PtyHealthSnapshot,
+  PtyOwnerPruneResult,
+  PtyOwnerSnapshot
+} from '../shared/ssh-types'
+import { parseDarwinPtyOwnerInventory } from './pty-owner-inventory'
 
 const execFile = promisify(execFileCallback)
 const DIAGNOSTIC_TIMEOUT_MS = 3_000
 
+async function readDarwinLsofOutput(): Promise<string> {
+  try {
+    const { stdout } = await execFile('/usr/sbin/lsof', ['-n', '-P', '-Fpcuftrn', '/dev/ptmx'], {
+      timeout: DIAGNOSTIC_TIMEOUT_MS,
+      maxBuffer: 8 * 1024 * 1024
+    })
+    return stdout
+  } catch (error) {
+    const lsofError = error as { code?: number | string; stdout?: string }
+    // Why: lsof exits 1 when no matching files exist; that is a valid empty inventory.
+    if (Number(lsofError.code) === 1 && !lsofError.stdout?.trim()) {
+      return ''
+    }
+    throw error
+  }
+}
+
 export function parsePositiveInteger(value: string): number | null {
   const parsed = Number.parseInt(value.trim(), 10)
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null
-}
-
-export function parseDarwinAllocatedPtys(output: string): number {
-  const ttyNames = new Set<string>()
-  for (const line of output.split(/\r?\n/u)) {
-    const ttyName = line.trim()
-    if (ttyName.startsWith('ttys')) {
-      ttyNames.add(ttyName)
-    }
-  }
-  return ttyNames.size
 }
 
 export function classifyPtyPressure(
@@ -47,14 +59,23 @@ async function readDarwinCapacity(): Promise<number | null> {
   return parsePositiveInteger(stdout)
 }
 
-async function readDarwinAllocated(): Promise<number> {
-  // Why: /dev/ttys* contains persistent device nodes, not live allocations.
-  // Unique process-backed TTY names reveal the active pool without requiring elevated lsof access.
-  const { stdout } = await execFile('/bin/ps', ['-axo', 'tty='], {
-    timeout: DIAGNOSTIC_TIMEOUT_MS,
-    maxBuffer: 4 * 1024 * 1024
+async function readDarwinOwnerInventory(): Promise<
+  ReturnType<typeof parseDarwinPtyOwnerInventory>
+> {
+  // Why: slave TTYs miss leaked master-only allocations; lsof's raw device id deduplicates inherited descriptors.
+  const [lsofOutput, { stdout: psOutput }] = await Promise.all([
+    readDarwinLsofOutput(),
+    execFile('/bin/ps', ['-axo', 'pid=,ppid=,tty=,lstart=,command='], {
+      timeout: DIAGNOSTIC_TIMEOUT_MS,
+      maxBuffer: 4 * 1024 * 1024,
+      env: { ...process.env, LC_ALL: 'C' }
+    })
+  ])
+  return parseDarwinPtyOwnerInventory({
+    lsofOutput,
+    psOutput,
+    currentPid: process.pid
   })
-  return parseDarwinAllocatedPtys(stdout)
 }
 
 export async function collectPtyHealth(args: {
@@ -75,10 +96,11 @@ export async function collectPtyHealth(args: {
     }
   }
   try {
-    const [systemCapacity, systemAllocated] = await Promise.all([
+    const [systemCapacity, inventory] = await Promise.all([
       readDarwinCapacity(),
-      readDarwinAllocated()
+      readDarwinOwnerInventory()
     ])
+    const systemAllocated = inventory.systemAllocated
     const systemAvailable =
       systemCapacity === null ? null : Math.max(0, systemCapacity - systemAllocated)
     return {
@@ -88,7 +110,8 @@ export async function collectPtyHealth(args: {
       systemAvailable,
       relayOwned: args.relayOwned,
       relayCapacity: args.relayCapacity,
-      pressure: classifyPtyPressure(systemCapacity, systemAvailable)
+      pressure: classifyPtyPressure(systemCapacity, systemAvailable),
+      owners: inventory.owners
     }
   } catch (error) {
     return {
@@ -102,4 +125,36 @@ export async function collectPtyHealth(args: {
       diagnosticError: error instanceof Error ? error.message : String(error)
     }
   }
+}
+
+export function selectPrunablePtyOwner(
+  snapshot: PtyHealthSnapshot,
+  ownerId: string
+): PtyOwnerSnapshot {
+  const owner = snapshot.owners?.find((candidate) => candidate.ownerId === ownerId)
+  if (!owner) {
+    throw new Error('pty_owner_not_found')
+  }
+  if (owner.category !== 'orca-relay' || owner.isCurrentRelay || owner.disposition !== 'safe') {
+    throw new Error('pty_owner_not_safe')
+  }
+  return owner
+}
+
+export async function prunePtyOwner(args: {
+  ownerId: string
+  relayOwned: number
+  relayCapacity: number
+}): Promise<PtyOwnerPruneResult> {
+  if (process.platform !== 'darwin') {
+    throw new Error('pty_owner_prune_unsupported')
+  }
+  // Why: rescan immediately before signaling so a stale UI cannot prune a relay that gained work.
+  const snapshot = await collectPtyHealth({
+    relayOwned: args.relayOwned,
+    relayCapacity: args.relayCapacity
+  })
+  const owner = selectPrunablePtyOwner(snapshot, args.ownerId)
+  process.kill(owner.pid, 'SIGTERM')
+  return { owner, signaled: true }
 }

@@ -345,6 +345,7 @@ const MOBILE_RPC_METHOD_ALLOWLIST = new Set([
   'ssh.connect',
   'ssh.getState',
   'ssh.getPtyHealth',
+  'ssh.prunePtyOwner',
   'ssh.listRemovedTargetLabels',
   'ssh.listTargets',
   'speech.dictation.cancel',
