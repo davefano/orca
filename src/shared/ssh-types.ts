@@ -144,6 +144,27 @@ export type SshMutationExpectation = {
 
 export type PtyHealthPressure = 'normal' | 'warning' | 'critical' | 'unknown'
 
+export type PtyOwnerCategory = 'orca-relay' | 'agent' | 'terminal' | 'other'
+
+export type PtyOwnerDisposition = 'safe' | 'recover-first' | 'protected' | 'unknown'
+
+export type PtyOwnerSnapshot = {
+  ownerId: string
+  pid: number
+  processStartedAt: string
+  command: string
+  category: PtyOwnerCategory
+  isCurrentRelay: boolean
+  allocationCount: number
+  attachedPtyCount: number
+  leakedPtyCount: number
+  activeAgentCount: number
+  workloadCount: number
+  idleShellCount: number
+  disposition: PtyOwnerDisposition
+  reason: string
+}
+
 export type PtyHealthSnapshot = {
   platform: NodeJS.Platform
   systemCapacity: number | null
@@ -152,7 +173,13 @@ export type PtyHealthSnapshot = {
   relayOwned: number
   relayCapacity: number
   pressure: PtyHealthPressure
+  owners?: PtyOwnerSnapshot[]
   diagnosticError?: string
+}
+
+export type PtyOwnerPruneResult = {
+  owner: PtyOwnerSnapshot
+  signaled: boolean
 }
 
 export type SshPtyHealthResult = {

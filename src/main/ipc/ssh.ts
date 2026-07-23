@@ -18,6 +18,7 @@ import type {
   SshConnectionState,
   DirectSshAuthority,
   PtyHealthSnapshot,
+  PtyOwnerPruneResult,
   SshPtyHealthResult
 } from '../../shared/ssh-types'
 import { SSH_TERMINATE_RECONNECT_REQUIRED } from '../../shared/constants'
@@ -121,6 +122,18 @@ export async function getRegisteredSshPtyHealth(targetId: string): Promise<SshPt
       error: error instanceof Error ? error.message : String(error)
     }
   }
+}
+
+export async function pruneRegisteredSshPtyOwner(
+  targetId: string,
+  ownerId: string
+): Promise<PtyOwnerPruneResult> {
+  const status = getRegisteredSshState(targetId)?.status ?? 'disconnected'
+  const mux = activeSessions.get(targetId)?.getMux()
+  if (!mux || mux.isDisposed() || status !== 'connected') {
+    throw new Error('SSH relay is not connected')
+  }
+  return (await mux.request('pty.pruneOwner', { ownerId })) as PtyOwnerPruneResult
 }
 
 /** Public targets for runtime RPC clients — same list the desktop renderer gets. */

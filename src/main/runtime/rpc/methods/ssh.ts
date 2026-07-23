@@ -4,7 +4,8 @@ import {
   getRegisteredSshPtyHealth,
   getRegisteredSshState,
   listRegisteredRemovedSshTargetLabels,
-  listRegisteredSshTargets
+  listRegisteredSshTargets,
+  pruneRegisteredSshPtyOwner
 } from '../../../ipc/ssh'
 import { defineMethod, type RpcMethod } from '../core'
 import { getPublicSshError, getPublicSshState } from '../../public-ssh-state'
@@ -16,6 +17,10 @@ const SshTarget = z.object({
 function listRegisteredSshTargetSummaries(): { id: string; label: string }[] {
   return listRegisteredSshTargets().map(({ id, label }) => ({ id, label }))
 }
+
+const SshPtyOwner = SshTarget.extend({
+  ownerId: z.string().min(1)
+})
 
 export const SSH_METHODS: RpcMethod[] = [
   defineMethod({
@@ -29,6 +34,13 @@ export const SSH_METHODS: RpcMethod[] = [
     name: 'ssh.getPtyHealth',
     params: SshTarget,
     handler: async (params) => ({ health: await getRegisteredSshPtyHealth(params.targetId) })
+  }),
+  defineMethod({
+    name: 'ssh.prunePtyOwner',
+    params: SshPtyOwner,
+    handler: async (params) => ({
+      prune: await pruneRegisteredSshPtyOwner(params.targetId, params.ownerId)
+    })
   }),
   defineMethod({
     name: 'ssh.connect',

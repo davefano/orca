@@ -46,6 +46,7 @@ import type {
   UnifiedWorktreeRow
 } from './resource-usage-merge-types'
 import { WorkspaceSpaceCompactPanel } from './WorkspaceSpaceCompactPanel'
+import { SshPtyHealthPanel } from './SshPtyHealthPanel'
 import { STATUS_BAR_CONTEXT_MENU_EXEMPT_PROPS } from './status-bar-context-menu-policy'
 import {
   isResourceSessionActivationKey,
@@ -1122,6 +1123,18 @@ export function ResourceUsageStatusSegment({
       }
     }
   }, [mountedRef, ptyHealthRuntimeTarget])
+
+  const pruneSshPtyOwner = useCallback(
+    async (targetId: string, ownerId: string): Promise<void> => {
+      await callRuntimeRpc(
+        ptyHealthRuntimeTarget,
+        'ssh.prunePtyOwner',
+        { targetId, ownerId },
+        { timeoutMs: 10_000, suppressFeatureInteraction: true }
+      )
+    },
+    [ptyHealthRuntimeTarget]
+  )
   const daemonActions = useDaemonActions({
     onRestartSettled: () => {
       clearSessionsError()
@@ -1754,45 +1767,12 @@ export function ResourceUsageStatusSegment({
           </div>
         )}
 
-        {(sshPtyHealth.length > 0 || sshPtyHealthLoading) && (
-          <div className="border-b border-border px-3 py-2 text-[10px]">
-            <div className="mb-1.5 flex items-center justify-between uppercase tracking-wide text-muted-foreground">
-              <span>SSH PTY health</span>
-              <button
-                type="button"
-                onClick={() => void refreshSshPtyHealth()}
-                disabled={sshPtyHealthLoading}
-                className="rounded p-0.5 transition-colors hover:bg-accent disabled:opacity-40"
-                aria-label="Refresh SSH PTY health"
-              >
-                <RotateCw className={cn('size-3', sshPtyHealthLoading && 'animate-spin')} />
-              </button>
-            </div>
-            <div className="space-y-1">
-              {sshPtyHealth.map((result) => {
-                const health = result.health
-                const tone =
-                  health?.pressure === 'critical'
-                    ? 'text-destructive'
-                    : health?.pressure === 'warning'
-                      ? 'text-yellow-500'
-                      : 'text-muted-foreground'
-                return (
-                  <div key={result.targetId} className="flex items-center justify-between gap-2">
-                    <span className="truncate text-foreground">{result.label}</span>
-                    <span className={cn('shrink-0 tabular-nums', tone)}>
-                      {health && health.systemAllocated !== null && health.systemCapacity !== null
-                        ? `${health.systemAllocated}/${health.systemCapacity} PTYs · ${health.systemAvailable} free · ${health.relayOwned} Orca`
-                        : (result.error ??
-                          health?.diagnosticError ??
-                          `${health?.relayOwned ?? 0} Orca PTYs`)}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
+        <SshPtyHealthPanel
+          results={sshPtyHealth}
+          loading={sshPtyHealthLoading}
+          onRefresh={() => void refreshSshPtyHealth()}
+          onPrune={pruneSshPtyOwner}
+        />
 
         {/* Why: fixed 420px height so the popover doesn't jump as worktrees expand/collapse or sessions change; inner tree owns its scroll. */}
         <div
