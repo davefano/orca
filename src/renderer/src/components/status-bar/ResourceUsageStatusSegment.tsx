@@ -109,6 +109,14 @@ const MEM_COLUMN_CLS = 'w-16 text-right'
 const FLOATING_DRAG_THRESHOLD_PX = 4
 const FLOATING_PANEL_VIEWPORT_MARGIN_PX = 8
 const FLOATING_PANEL_RECOVERY_HEIGHT_PX = 32
+const FLOATING_KEYBOARD_STEP_PX = 8
+const FLOATING_KEYBOARD_COARSE_FACTOR = 5
+const FLOATING_KEYBOARD_DELTAS: Record<string, FloatingPosition | undefined> = {
+  ArrowLeft: { x: -1, y: 0 },
+  ArrowRight: { x: 1, y: 0 },
+  ArrowUp: { x: 0, y: -1 },
+  ArrowDown: { x: 0, y: 1 }
+}
 // Why: every row and the header reserve this trailing gutter so CPU/Memory columns align whether or not the row has recovery controls.
 const ROW_TRAILING_GUTTER_CLS = 'w-10 shrink-0 flex items-center justify-end gap-0.5'
 
@@ -1090,6 +1098,26 @@ export function ResourceUsageStatusSegment({
     [applyFloatingPosition, stopDragEvent]
   )
 
+  // Why: the grip is the only way to move the panel, so it needs a keyboard
+  // path. Arrow steps commit straight to state — there is no drag to coalesce.
+  const handleFloatingDragKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLElement>): void => {
+      const step =
+        FLOATING_KEYBOARD_STEP_PX * (event.shiftKey ? FLOATING_KEYBOARD_COARSE_FACTOR : 1)
+      const delta = FLOATING_KEYBOARD_DELTAS[event.key]
+      if (!delta) {
+        return
+      }
+      event.preventDefault()
+      event.stopPropagation()
+      const origin = floatingPositionRef.current ?? { x: 0, y: 0 }
+      setFloatingPosition(
+        applyFloatingPosition({ x: origin.x + delta.x * step, y: origin.y + delta.y * step })
+      )
+    },
+    [applyFloatingPosition]
+  )
+
   useEffect(() => {
     if (!open) {
       return
@@ -1635,8 +1663,12 @@ export function ResourceUsageStatusSegment({
       >
         <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-1.5">
           <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-foreground">
-            <span
-              role="presentation"
+            <button
+              type="button"
+              aria-label={translate(
+                'auto.components.status.bar.ResourceUsageStatusSegment.0f41c4e8d1',
+                'Move Resource Manager'
+              )}
               title={translate(
                 'auto.components.status.bar.ResourceUsageStatusSegment.0f41c4e8d1',
                 'Move Resource Manager'
@@ -1645,17 +1677,18 @@ export function ResourceUsageStatusSegment({
               onPointerMove={handleFloatingDragMove}
               onPointerUp={handleFloatingDragEnd}
               onPointerCancel={handleFloatingDragEnd}
+              onKeyDown={handleFloatingDragKeyDown}
               onClick={(event) => {
                 event.stopPropagation()
                 event.preventDefault()
               }}
               className={cn(
-                'inline-flex size-5 shrink-0 touch-none select-none items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
+                'inline-flex size-5 shrink-0 touch-none select-none items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
                 floatingDragging ? 'cursor-grabbing' : 'cursor-grab'
               )}
             >
               <GripHorizontal className="size-3" />
-            </span>
+            </button>
             <MemoryStick className="size-3 shrink-0 text-muted-foreground" />
             <span className="truncate">
               {translate('auto.components.status.bar.StatusBar.d1e1a7a6bf', 'Resource Manager')}
@@ -1741,7 +1774,7 @@ export function ResourceUsageStatusSegment({
                   )}
                   className="inline-flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 >
-                  <X className="size-3.5" />
+                  <X className="size-3" />
                 </button>
               </TooltipTrigger>
               <TooltipContent side="top" sideOffset={6}>
