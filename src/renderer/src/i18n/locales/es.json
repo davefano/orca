@@ -2976,9 +2976,9 @@
             "c7e3b1a0d9f2": "Terminar {{value0}} terminal huérfano",
             "d8f4c2b1e0a3": "Terminar {{value0}} terminales huérfanos",
             "e9a5d3c2b1f0": "¿Terminar {{value0}}?",
-            "0f41c4e8d1": "Move Resource Manager",
-            "b2f6b4c0b4": "Reset Resource Manager position",
-            "17a6a2c4f3": "Close Resource Manager"
+            "0f41c4e8d1": "Mover el Administrador de recursos",
+            "b2f6b4c0b4": "Restablecer la posición del Administrador de recursos",
+            "17a6a2c4f3": "Cerrar el Administrador de recursos"
           },
           "SshStatusSegment": {
             "3ad70e0365": "Administrar hosts remotos…",
