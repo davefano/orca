@@ -5,7 +5,6 @@ import {
   ChevronDown,
   ChevronRight,
   Globe,
-  GripHorizontal,
   LoaderCircle,
   MemoryStick,
   Plus,
@@ -1742,27 +1741,6 @@ export function ResourceUsageStatusSegment({
           )}
         >
           <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-foreground">
-            <span
-              role="presentation"
-              title={translate(
-                'auto.components.status.bar.ResourceUsageStatusSegment.0f41c4e8d1',
-                'Move Resource Manager'
-              )}
-              onPointerDown={handleFloatingDragStart}
-              onPointerMove={handleFloatingDragMove}
-              onPointerUp={handleFloatingDragEnd}
-              onPointerCancel={handleFloatingDragEnd}
-              onClick={(event) => {
-                event.stopPropagation()
-                event.preventDefault()
-              }}
-              className={cn(
-                'inline-flex size-5 shrink-0 touch-none select-none items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
-                floatingDragging ? 'cursor-grabbing' : 'cursor-grab'
-              )}
-            >
-              <GripHorizontal className="size-3" />
-            </span>
             <MemoryStick className="size-3 shrink-0 text-muted-foreground" />
             <span className="truncate">
               {translate('auto.components.status.bar.StatusBar.d1e1a7a6bf', 'Resource Manager')}
