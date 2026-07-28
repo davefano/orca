@@ -315,7 +315,7 @@ function getRepositoryGroupingForRepo(
   if (!repo) {
     return {
       key: `repository:repo:${repoId}`,
-      label: 'Unknown'
+      label: repoId
     }
   }
   const identityKey = getProjectIdentityKey(repo)
