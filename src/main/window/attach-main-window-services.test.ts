@@ -48,7 +48,9 @@ const {
 }))
 
 vi.mock('electron', () => ({
-  app: {},
+  app: {
+    getPath: vi.fn(() => '/tmp/orca-test-user-data')
+  },
   clipboard: {},
   systemPreferences: {
     askForMediaAccess: systemPreferencesAskForMediaAccessMock,
@@ -289,7 +291,7 @@ describe('attachMainWindowServices', () => {
     expect(hydrateLocalPtyRegistryAtBootMock).toHaveBeenLastCalledWith(store)
   })
 
-  it('passes injected update quit cleanup to the auto-updater', async () => {
+  it('never configures the official updater for OrcaTeal', async () => {
     const onBeforeUpdateQuit = vi.fn()
     const store = createStore()
     const mainWindow = createMainWindow()
@@ -303,30 +305,23 @@ describe('attachMainWindowServices', () => {
       { onBeforeUpdateQuit, updateInstallMode: 'supervised-headless-serve' }
     )
 
-    // Deferred to first paint — must not be configured at attach time.
     expect(setupAutoUpdaterMock).not.toHaveBeenCalled()
     await fireReadyToShow(mainWindow)
-    expect(setupAutoUpdaterMock).toHaveBeenCalledTimes(1)
-    expect(setupAutoUpdaterMock).toHaveBeenCalledWith(
-      mainWindow,
-      expect.objectContaining({ installMode: 'supervised-headless-serve' })
-    )
-    await setupAutoUpdaterMock.mock.calls[0][1].onBeforeQuit()
-
-    expect(onBeforeUpdateQuit).toHaveBeenCalledTimes(1)
-    expect(store.flushPendingAsync).toHaveBeenCalledTimes(1)
+    expect(setupAutoUpdaterMock).not.toHaveBeenCalled()
+    expect(onBeforeUpdateQuit).not.toHaveBeenCalled()
+    expect(store.flushPendingAsync).not.toHaveBeenCalled()
   })
 
-  it('flushes the store before update quit when no cleanup is injected', async () => {
+  it('does not install updater quit hooks when cleanup is omitted', async () => {
     const store = createStore()
     const mainWindow = createMainWindow()
 
     attachMainWindowServices(mainWindow as never, store, createRuntime() as never)
 
     await fireReadyToShow(mainWindow)
-    await setupAutoUpdaterMock.mock.calls[0][1].onBeforeQuit()
 
-    expect(store.flushPendingAsync).toHaveBeenCalledTimes(1)
+    expect(setupAutoUpdaterMock).not.toHaveBeenCalled()
+    expect(store.flushPendingAsync).not.toHaveBeenCalled()
   })
 
   it('replaces the TCC handlers when the main window is reattached', () => {
