@@ -3,10 +3,10 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const SOURCE_PATH = resolve(__dirname, 'ResourceUsageStatusSegment.tsx')
+const source = readFileSync(SOURCE_PATH, 'utf8')
 
 describe('ResourceUsageStatusSegment dragging', () => {
   it('uses the full header as the drag surface without stealing button interactions', () => {
-    const source = readFileSync(SOURCE_PATH, 'utf8')
     const headerStart = source.indexOf('role="group"')
     const headerEnd = source.indexOf('{daemonUnreachable &&', headerStart)
     const header = source.slice(headerStart, headerEnd)
@@ -21,7 +21,6 @@ describe('ResourceUsageStatusSegment dragging', () => {
   })
 
   it('keeps the translated position through the exit animation, then resets it', () => {
-    const source = readFileSync(SOURCE_PATH, 'utf8')
     const cancelStart = source.indexOf('const cancelFloatingDrag = useCallback')
     const cancelEnd = source.indexOf('const resetFloatingPosition = useCallback', cancelStart)
     const cancel = source.slice(cancelStart, cancelEnd)
@@ -44,9 +43,10 @@ describe('ResourceUsageStatusSegment dragging', () => {
     expect(resetStart).toBeGreaterThanOrEqual(0)
     expect(reset).toContain('cancelFloatingDrag()')
     expect(reset).toContain('floatingPositionRef.current = null')
-    expect(reset).toContain("'--resource-manager-x', '0px'")
-    expect(reset).toContain("'--resource-manager-y', '0px'")
+    expect(reset).toContain('writeFloatingPosition(floatingPanelRef.current, null)')
     expect(reset).toContain('setFloatingPosition(null)')
+    expect(source).toContain("'--resource-manager-x'")
+    expect(source).toContain("'--resource-manager-y'")
 
     expect(closeStart).toBeGreaterThanOrEqual(0)
     expect(close).not.toContain('resetFloatingPosition()')
