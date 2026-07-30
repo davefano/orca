@@ -353,7 +353,9 @@ describe('mergeSnapshotAndSessions', () => {
   it('uses runtime terminal attribution to keep detached SSH PTYs out of unattributed', () => {
     const sessionId = 'ssh:ssh-bumblebee@@pty-4'
     const worktreeId = 'teal-bumblebee::/Users/daveagent/workspaces/teal'
-    const ds: DaemonSession[] = [{ id: sessionId, cwd: '', title: 'shell' }]
+    const ds: DaemonSession[] = [
+      { id: sessionId, cwd: '', title: 'shell', agentOwnership: 'absent' }
+    ]
     const ctx = baseCtx({
       repoDisplayNameById: new Map([['teal-bumblebee', 'Teal']]),
       repoConnectionIdById: new Map([['teal-bumblebee', 'ssh-bumblebee']]),
@@ -402,7 +404,9 @@ describe('mergeSnapshotAndSessions', () => {
 
   it('ignores runtime attribution when daemon SSH route points at another host', () => {
     const sessionId = 'ssh:ssh-jazz@@pty-2'
-    const ds: DaemonSession[] = [{ id: sessionId, cwd: '', title: 'shell' }]
+    const ds: DaemonSession[] = [
+      { id: sessionId, cwd: '', title: 'shell', agentOwnership: 'absent' }
+    ]
     const ctx = baseCtx({
       repoDisplayNameById: new Map([['teal-bumblebee', 'Teal']]),
       repoConnectionIdById: new Map([['teal-bumblebee', 'ssh-bumblebee']]),

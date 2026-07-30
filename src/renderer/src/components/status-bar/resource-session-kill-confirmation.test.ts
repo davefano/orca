@@ -14,6 +14,12 @@ function row(overrides: Partial<UnifiedSessionRow> = {}): UnifiedSessionRow {
     cpu: null,
     memory: null,
     hasLocalSamples: false,
+    connectionId: null,
+    hostLabel: null,
+    relayPtyId: null,
+    originLeafId: null,
+    originSource: null,
+    orphanReason: null,
     ...overrides
   }
 }

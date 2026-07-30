@@ -102,7 +102,7 @@ export function buildResourceSessionBindingIndex(
     if (!tabIdToWorktreeId.has(tabId)) {
       continue
     }
-    addBinding(ptyIdToTabId, tabId, sessionId)
+    addBinding(ptyIdToTabId, originByPtyId, tabIdToWorktreeId, tabId, sessionId, 'tab-wake')
   }
 
   return {
