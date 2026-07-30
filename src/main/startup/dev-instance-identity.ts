@@ -1,12 +1,13 @@
 import { createHash } from 'node:crypto'
 import path from 'node:path'
 import type { AppIdentity } from '../../shared/app-identity'
+import { ORCA_APP_ID } from '../../shared/local-build-compatibility'
 
 // Why: OrcaTeal is a separately packaged daily-driver build. Its stable
 // identity keeps app data, Keychain storage, Dock/Spotlight identity, and
 // runtime ownership isolated from both official Orca and Orca Dev.
 const BASE_APP_NAME = 'OrcaTeal'
-const BASE_APP_USER_MODEL_ID = 'com.teal.orcateal'
+const BASE_APP_USER_MODEL_ID = ORCA_APP_ID
 const MAX_LABEL_LENGTH = 80
 
 export type DevInstanceIdentity = AppIdentity & {
@@ -14,7 +15,8 @@ export type DevInstanceIdentity = AppIdentity & {
   // Why: drives app.setName → the macOS safeStorage Keychain item name
   // ("<appName> Safe Storage"). Kept stable across dev branches (unlike the
   // per-branch `name`) so every dev instance shares one Keychain key instead of
-  // creating a new one per branch and re-prompting. Distinct from prod's 'Orca'.
+  // creating a new one per branch and re-prompting. Distinct from production
+  // OrcaTeal's safe-storage identity.
   appName: string
 }
 
@@ -80,7 +82,7 @@ export function getDevInstanceIdentity(
 
   return {
     name: dockTitle,
-    // Why: one stable Keychain key ('Orca Dev Safe Storage') for all dev
+    // Why: one stable Keychain key ('OrcaTeal Dev Safe Storage') for all dev
     // branches; the per-branch identity still shows via `name` (window title,
     // app menu, renderer label).
     appName: `${BASE_APP_NAME} Dev`,

@@ -14,11 +14,11 @@ const {
 const { verifyLinuxGlibcFloor } = require('./scripts/verify-linux-glibc-floor.cjs')
 const { writeMacBuildCompatibility } = require('./scripts/mac-build-compatibility.cjs')
 const { verifyPackagedPluginResources } = require('./scripts/verify-packaged-plugin-resources.cjs')
+const { appId } = require('../src/shared/local-build-compatibility-contract.json')
 
 const isMacRelease = process.env.ORCA_MAC_RELEASE === '1'
 const isLinuxArm64Release = process.env.ORCA_LINUX_ARM64_RELEASE === '1'
 const localBuildVersion = isMacRelease ? undefined : process.env.ORCA_LOCAL_BUILD_VERSION
-const appId = 'com.teal.orcateal'
 const featureWallResources = {
   from: 'resources/onboarding/feature-wall',
   to: 'onboarding/feature-wall'
