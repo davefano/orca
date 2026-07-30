@@ -75,7 +75,10 @@ import {
   selectUnboundDaemonSessions,
   type ResourceSessionBindingInputs
 } from './resource-session-bindings'
-import { clampResourceManagerPosition } from './resource-manager-drag-bounds'
+import {
+  clampResourceManagerPosition,
+  type ResourceManagerPosition
+} from './resource-manager-drag-bounds'
 import { useResourceSessionInventory } from './use-resource-session-inventory'
 import { translate } from '@/i18n/i18n'
 
@@ -83,17 +86,11 @@ const POLL_MS = 2_000
 
 type SortOption = 'memory' | 'cpu' | 'name'
 
-type FloatingPosition = {
-  x: number
-  y: number
-}
-
 type FloatingDragState = {
   pointerId: number
   startX: number
   startY: number
-  originX: number
-  originY: number
+  origin: ResourceManagerPosition
   activated: boolean
 }
 
@@ -105,7 +102,7 @@ const FLOATING_PANEL_VIEWPORT_MARGIN_PX = 8
 const FLOATING_PANEL_RECOVERY_HEIGHT_PX = 32
 const FLOATING_KEYBOARD_STEP_PX = 8
 const FLOATING_KEYBOARD_COARSE_FACTOR = 5
-const FLOATING_KEYBOARD_DELTAS: Record<string, FloatingPosition | undefined> = {
+const FLOATING_KEYBOARD_DELTAS: Record<string, ResourceManagerPosition | undefined> = {
   ArrowLeft: { x: -1, y: 0 },
   ArrowRight: { x: 1, y: 0 },
   ArrowUp: { x: 0, y: -1 },
@@ -113,6 +110,14 @@ const FLOATING_KEYBOARD_DELTAS: Record<string, FloatingPosition | undefined> = {
 }
 // Why: every row and the header reserve this trailing gutter so CPU/Memory columns align whether or not the row has a kill-X.
 const ROW_TRAILING_GUTTER_CLS = 'w-5 shrink-0 flex items-center justify-end'
+
+function writeFloatingPosition(
+  panel: HTMLDivElement | null,
+  position: ResourceManagerPosition | null
+): void {
+  panel?.style.setProperty('--resource-manager-x', `${position?.x ?? 0}px`)
+  panel?.style.setProperty('--resource-manager-y', `${position?.y ?? 0}px`)
+}
 
 // ─── Formatters ─────────────────────────────────────────────────────
 
@@ -767,7 +772,7 @@ export function ResourceUsageStatusSegment({
   const workspaceSpaceScanning = useAppStore((s) => s.workspaceSpaceScanning)
 
   const [open, setOpen] = useState(false)
-  const [floatingPosition, setFloatingPosition] = useState<FloatingPosition | null>(null)
+  const [floatingPosition, setFloatingPosition] = useState<ResourceManagerPosition | null>(null)
   const [floatingDragging, setFloatingDragging] = useState(false)
   const [sortOption, setSortOption] = useState<SortOption>('memory')
   const [collapsedRepos, setCollapsedRepos] = useState<Set<string>>(new Set())
@@ -828,15 +833,18 @@ export function ResourceUsageStatusSegment({
   // Why: after a kill unmounts the session, focus would fall to <body>; park a ref on the popover body to restore it stably for keyboard users.
   const floatingDragRef = useRef<FloatingDragState | null>(null)
   const floatingDragFrameRef = useRef<number | null>(null)
-  const pendingFloatingPositionRef = useRef<FloatingPosition | null>(null)
-  const floatingPositionRef = useRef<FloatingPosition | null>(floatingPosition)
+  const pendingFloatingPositionRef = useRef<ResourceManagerPosition | null>(null)
+  const floatingPositionRef = useRef<ResourceManagerPosition | null>(floatingPosition)
   const floatingPanelRef = useRef<HTMLDivElement | null>(null)
   const popoverBodyRef = useRef<HTMLDivElement | null>(null)
   const popoverBodyFocusFrameRef = useRef<number | null>(null)
   const mountedRef = useMountedRef()
 
   const clampFloatingOffset = useCallback(
-    (position: FloatingPosition, current: FloatingPosition): FloatingPosition => {
+    (
+      position: ResourceManagerPosition,
+      current: ResourceManagerPosition
+    ): ResourceManagerPosition => {
       const panel = floatingPanelRef.current
       if (!panel) {
         return current
@@ -860,12 +868,14 @@ export function ResourceUsageStatusSegment({
   }, [])
 
   const applyFloatingPosition = useCallback(
-    (proposed: FloatingPosition): FloatingPosition => {
+    (proposed: ResourceManagerPosition): ResourceManagerPosition => {
       const current = floatingPositionRef.current ?? { x: 0, y: 0 }
       const next = clampFloatingOffset(proposed, current)
+      if (next.x === current.x && next.y === current.y) {
+        return current
+      }
       floatingPositionRef.current = next
-      floatingPanelRef.current?.style.setProperty('--resource-manager-x', `${next.x}px`)
-      floatingPanelRef.current?.style.setProperty('--resource-manager-y', `${next.y}px`)
+      writeFloatingPosition(floatingPanelRef.current, next)
       return next
     },
     [clampFloatingOffset]
@@ -873,12 +883,7 @@ export function ResourceUsageStatusSegment({
 
   useEffect(() => {
     floatingPositionRef.current = floatingPosition
-    const panel = floatingPanelRef.current
-    if (!panel) {
-      return
-    }
-    panel.style.setProperty('--resource-manager-x', `${floatingPosition?.x ?? 0}px`)
-    panel.style.setProperty('--resource-manager-y', `${floatingPosition?.y ?? 0}px`)
+    writeFloatingPosition(floatingPanelRef.current, floatingPosition)
   }, [floatingPosition])
 
   useEffect(
@@ -922,8 +927,7 @@ export function ResourceUsageStatusSegment({
         pointerId: event.pointerId,
         startX: event.clientX,
         startY: event.clientY,
-        originX: origin.x,
-        originY: origin.y,
+        origin,
         activated: false
       }
       setFloatingDragging(true)
@@ -947,8 +951,8 @@ export function ResourceUsageStatusSegment({
       }
       drag.activated = true
       pendingFloatingPositionRef.current = {
-        x: drag.originX + deltaX,
-        y: drag.originY + deltaY
+        x: drag.origin.x + deltaX,
+        y: drag.origin.y + deltaY
       }
       if (floatingDragFrameRef.current === null) {
         floatingDragFrameRef.current = requestAnimationFrame(() => {
@@ -1027,8 +1031,7 @@ export function ResourceUsageStatusSegment({
   const resetFloatingPosition = useCallback((): void => {
     cancelFloatingDrag()
     floatingPositionRef.current = null
-    floatingPanelRef.current?.style.setProperty('--resource-manager-x', '0px')
-    floatingPanelRef.current?.style.setProperty('--resource-manager-y', '0px')
+    writeFloatingPosition(floatingPanelRef.current, null)
     setFloatingPosition(null)
   }, [cancelFloatingDrag])
 
@@ -1067,11 +1070,23 @@ export function ResourceUsageStatusSegment({
     }
     // Why: Radix can choose a new anchor placement when the popover reopens;
     // revalidate the saved offset against that live surface before reuse.
-    const frameId = requestAnimationFrame(keepPanelReachable)
-    window.addEventListener('resize', keepPanelReachable)
+    let frameId: number | null = null
+    const scheduleReachabilityCheck = (): void => {
+      if (frameId !== null) {
+        return
+      }
+      frameId = requestAnimationFrame(() => {
+        frameId = null
+        keepPanelReachable()
+      })
+    }
+    scheduleReachabilityCheck()
+    window.addEventListener('resize', scheduleReachabilityCheck)
     return () => {
-      cancelAnimationFrame(frameId)
-      window.removeEventListener('resize', keepPanelReachable)
+      if (frameId !== null) {
+        cancelAnimationFrame(frameId)
+      }
+      window.removeEventListener('resize', scheduleReachabilityCheck)
     }
   }, [clampFloatingOffset, open])
 
