@@ -38,7 +38,9 @@ const {
 }))
 
 vi.mock('electron', () => ({
-  app: {},
+  app: {
+    getPath: vi.fn(() => '/tmp/orca-test-user-data')
+  },
   clipboard: {},
   systemPreferences: {
     askForMediaAccess: systemPreferencesAskForMediaAccessMock,
@@ -142,7 +144,10 @@ function createMainWindow(extraWebContents: { on?: MockFn; send?: MockFn } = {})
 }
 
 function createStore(): Store & { flush: MockFn } {
-  return { flush: vi.fn() } as Store & { flush: MockFn }
+  return {
+    flush: vi.fn(),
+    getSettings: vi.fn(() => ({ telemetry: { installId: 'test-install-id' } }))
+  } as unknown as Store & { flush: MockFn }
 }
 
 function createRuntime(): RuntimeStub {
