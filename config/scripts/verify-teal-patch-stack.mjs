@@ -50,6 +50,24 @@ export function validateManifest(manifest) {
       }
     }
   }
+  const watchIds = new Set()
+  for (const item of manifest.upstreamWatchlist ?? []) {
+    if (!item.id) {
+      errors.push('every upstream watch item requires an id')
+    }
+    if (watchIds.has(item.id) || ids.has(item.id)) {
+      errors.push(`duplicate patch or watch id: ${item.id}`)
+    }
+    watchIds.add(item.id)
+    if (!Array.isArray(item.commits) || item.commits.length === 0) {
+      errors.push(`upstream watch item ${item.id} requires commits`)
+    }
+    for (const commit of item.commits ?? []) {
+      if (!commit.sha || !commit.subject || !commit.role) {
+        errors.push(`upstream watch item ${item.id} has an invalid commit`)
+      }
+    }
+  }
   return errors
 }
 
@@ -91,6 +109,7 @@ function audit({ manifestPath = DEFAULT_MANIFEST, baseOverride, strict = false }
     .filter(Boolean)
     .toReversed()
   const patches = []
+  const upstreamWatchlist = []
   const failures = []
 
   if (!baseOverride && !baseCommit.startsWith(manifest.base.commit)) {
@@ -137,6 +156,29 @@ function audit({ manifestPath = DEFAULT_MANIFEST, baseOverride, strict = false }
     })
   }
 
+  for (const item of manifest.upstreamWatchlist ?? []) {
+    const commits = item.commits.map((commit) => {
+      let includedInBase = false
+      try {
+        git(['merge-base', '--is-ancestor', commit.sha, base])
+        includedInBase = true
+      } catch {
+        includedInBase = false
+      }
+      let patchStatus = 'unavailable'
+      try {
+        patchStatus = classifyCherryOutput(git(['cherry', base, commit.sha, `${commit.sha}^`]))
+      } catch {
+        // Report below; donor commits must remain fetchable for future audits.
+      }
+      return { ...commit, includedInBase, patchStatus }
+    })
+    if (strict && commits.some((commit) => commit.patchStatus === 'unavailable')) {
+      failures.push(`upstream watch item ${item.id} could not be audited; fetch donor commits`)
+    }
+    upstreamWatchlist.push({ id: item.id, status: item.status, commits })
+  }
+
   for (const excluded of manifest.excluded ?? []) {
     for (const subject of excluded.subjects ?? []) {
       if (subjects.includes(subject)) {
@@ -145,7 +187,15 @@ function audit({ manifestPath = DEFAULT_MANIFEST, baseOverride, strict = false }
     }
   }
 
-  return { ok: failures.length === 0, base, baseCommit, failures, validationErrors: [], patches }
+  return {
+    ok: failures.length === 0,
+    base,
+    baseCommit,
+    failures,
+    validationErrors: [],
+    patches,
+    upstreamWatchlist
+  }
 }
 
 function printReport(report) {
@@ -160,6 +210,15 @@ function printReport(report) {
         : 'missing'
     const upstream = patch.absorbed ? 'upstream-equivalent' : 'teal-only'
     console.log(`- ${patch.id}: ${state}; ${upstream}`)
+  }
+  for (const item of report.upstreamWatchlist ?? []) {
+    const included = item.commits.filter((commit) => commit.includedInBase).length
+    const equivalent = item.commits.filter(
+      (commit) => commit.patchStatus === 'upstream-equivalent'
+    ).length
+    console.log(
+      `- watch:${item.id}: ${item.status}; ${included}/${item.commits.length} in base; ${equivalent}/${item.commits.length} patch-equivalent`
+    )
   }
   for (const error of [...report.validationErrors, ...(report.failures ?? [])]) {
     console.error(`ERROR: ${error}`)
