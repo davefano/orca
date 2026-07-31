@@ -51,7 +51,11 @@
         { "sha": "e9f5449e8", "subject": "fix(sidebar): harden repository grouping integration" },
         { "sha": "890dcc0ad", "subject": "fix(sidebar): use repository id for missing metadata" },
         { "sha": "5a1cf6a8f", "subject": "fix(sidebar): always provide host labels" },
-        { "sha": "8427346e1", "subject": "fix(sidebar): show mirrored SSH hosts" }
+        { "sha": "8427346e1", "subject": "fix(sidebar): show mirrored SSH hosts" },
+        {
+          "sha": "b16b3c4c6",
+          "subject": "fix(sidebar): preserve SSH hosts across grouping modes"
+        }
       ],
       "requiredPaths": [
         "src/renderer/src/components/sidebar/worktree-list-groups.ts",
