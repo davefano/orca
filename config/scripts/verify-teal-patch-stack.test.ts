@@ -33,4 +33,19 @@ describe('Teal patch stack verification', () => {
     expect(errors).toContain('duplicate patch id: same')
     expect(errors).toContain('patch order must be strictly increasing: same')
   })
+
+  it('requires auditable upstream watch items with unique ids', () => {
+    const errors = validateManifest({
+      schemaVersion: 1,
+      base: { tag: 'v1', commit: 'abc' },
+      patches: [{ id: 'same', order: 10, sourceCommits: [{ sha: '1', subject: 'one' }] }],
+      upstreamWatchlist: [
+        { id: 'same', commits: [{ sha: '2', subject: 'two' }] },
+        { id: 'missing-commits', commits: [] }
+      ]
+    })
+    expect(errors).toContain('duplicate patch or watch id: same')
+    expect(errors).toContain('upstream watch item same has an invalid commit')
+    expect(errors).toContain('upstream watch item missing-commits requires commits')
+  })
 })
