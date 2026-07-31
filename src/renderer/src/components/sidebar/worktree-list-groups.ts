@@ -38,6 +38,7 @@ import { translate } from '@/i18n/i18n'
 import {
   getExecutionHostLabel,
   LOCAL_EXECUTION_HOST_ID,
+  parseExecutionHostId,
   getRepoExecutionHostId,
   getWorktreeExecutionHostId,
   toSshExecutionHostId,
@@ -766,15 +767,24 @@ function getRepoHostLabel(
   projectIndex: ProjectGroupingIndex | null,
   hostLabelById: ReadonlyMap<string, string> | undefined
 ): string | null {
+  const repo = repoMap.get(repoId)
   const setup = projectIndex?.setupByRepoId.get(repoId)
   if (setup) {
-    return hostLabelById?.get(setup.hostId) ?? getExecutionHostLabel(setup.hostId)
+    const setupHost = parseExecutionHostId(setup.hostId)
+    const hostId =
+      setupHost?.kind === 'runtime' && repo?.connectionId
+        ? toSshExecutionHostId(repo.connectionId)
+        : setup.hostId
+    return hostLabelById?.get(hostId) ?? getExecutionHostLabel(hostId)
   }
-  const repo = repoMap.get(repoId)
   if (!repo) {
     return null
   }
-  const hostId = getRepoExecutionHostId(repo)
+  const executionHost = parseExecutionHostId(repo.executionHostId)
+  const hostId =
+    executionHost?.kind === 'runtime' && repo.connectionId
+      ? toSshExecutionHostId(repo.connectionId)
+      : getRepoExecutionHostId(repo)
   return hostLabelById?.get(hostId) ?? getExecutionHostLabel(hostId)
 }
 
