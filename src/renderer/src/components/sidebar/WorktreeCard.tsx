@@ -1181,8 +1181,7 @@ const WorktreeCard = React.memo(function WorktreeCard({
     showRepoIdentityInTitle && !!repo && !hideRepoBadge && !isFolder && !showPinnedRepoIcon
   const showRepoBadgeInMetaRow =
     !showRepoIdentityInTitle && !!repo && !hideRepoBadge && !showPinnedRepoIcon
-  const showHostContextBadge =
-    !compactCards && cardProps.includes('host') && Boolean(hostContextLabel)
+  const showHostContextBadge = cardProps.includes('host') && Boolean(hostContextLabel)
   const showDetachedHeadInMetaRow = !compactCards && !isFolder && detachedHeadDisplay !== null
   const showBranch =
     !isFolder &&
@@ -1212,7 +1211,7 @@ const WorktreeCard = React.memo(function WorktreeCard({
     showMetaRowDetails
   )
   const hasMetaRow = compactCards
-    ? hasMetadataBadge || cacheStartedAt != null
+    ? hasMetadataBadge || cacheStartedAt != null || showHostContextBadge
     : hasDetailedMetaRowContent
   const showHeaderActions = showTitleRowPrimary || showDeleteQuickAction
   // Why: normalize the title once so title/branch de-dupe and identity-only hover eligibility stay in sync.

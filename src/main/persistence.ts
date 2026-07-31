@@ -3321,6 +3321,11 @@ export class Store {
               loadedCompactWorktreeCards &&
               parsed.ui?._worktreeCardModeDefaulted === true &&
               isDefaultedCompactWorktreeCardProperties(rawCardProps)
+            const needsDefaultedHostPropertyMigration =
+              !loadedCompactWorktreeCards &&
+              parsed.ui?._worktreeCardModeDefaulted === true &&
+              Array.isArray(rawCardProps) &&
+              !rawCardProps.includes('host')
             const migratedCardProps = (() => {
               if (!Array.isArray(rawCardProps)) {
                 return undefined
@@ -3331,16 +3336,19 @@ export class Store {
               const candidate = needsInlineAgentsMigration
                 ? [...rawCardProps, 'inline-agents' as const]
                 : rawCardProps
+              const hostCandidate = needsDefaultedHostPropertyMigration
+                ? [...candidate, 'host' as const]
+                : candidate
               const expandedCandidate = (() => {
                 if (expandedCardPropsMigrated) {
-                  return candidate
+                  return hostCandidate
                 }
-                const next = [...candidate]
+                const next = [...hostCandidate]
                 // Why: Linear rode the 'issue' property and Ports were always shown; split them out once to preserve existing cards.
-                if (candidate.includes('issue') && !candidate.includes('linear-issue')) {
+                if (hostCandidate.includes('issue') && !hostCandidate.includes('linear-issue')) {
                   next.push('linear-issue' as const)
                 }
-                if (!candidate.includes('ports')) {
+                if (!hostCandidate.includes('ports')) {
                   next.push('ports' as const)
                 }
                 return next
