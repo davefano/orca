@@ -1,5 +1,5 @@
 import type { Repo, Worktree } from '../../../../shared/types'
-import { isRepoSectionGrouping, type WorktreeGroupBy } from './worktree-list-groups'
+import type { WorktreeGroupBy } from './worktree-list-groups'
 
 export function getEmptyProjectPlaceholderRepoIds(args: {
   groupBy: WorktreeGroupBy
@@ -8,7 +8,10 @@ export function getEmptyProjectPlaceholderRepoIds(args: {
   visibleWorktrees: readonly Worktree[]
   filterRepoIds: readonly string[]
 }): Set<string> {
-  if (!isRepoSectionGrouping(args.groupBy)) {
+  // Why: Project headers own the create/actions affordances for an empty repo.
+  // Repository grouping represents canonical repos with visible workspaces only;
+  // emitting an empty row there creates an inert header the user cannot act on.
+  if (args.groupBy !== 'repo') {
     return new Set()
   }
 

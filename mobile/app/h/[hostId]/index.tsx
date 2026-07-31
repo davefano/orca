@@ -80,6 +80,7 @@ import {
 import {
   applyDesktopViewSettings,
   groupModeToDesktop,
+  isMobileRepoGrouping,
   type MobileGroupMode,
   type MobileSortMode,
   type MobileViewState,
@@ -909,8 +910,10 @@ export function HostScreen({
                     : groupMode === 'workspaceStatus'
                       ? 'Status'
                       : groupMode === 'repo'
-                        ? 'Repo'
-                        : 'PR'}
+                        ? 'Project'
+                        : groupMode === 'repository'
+                          ? 'Repository'
+                          : 'PR'}
                 </Text>
               </Pressable>
             </View>
@@ -1031,8 +1034,10 @@ export function HostScreen({
                   : groupMode === 'workspaceStatus'
                     ? 'Status'
                     : groupMode === 'repo'
-                      ? 'Repo'
-                      : 'PR'}
+                      ? 'Project'
+                      : groupMode === 'repository'
+                        ? 'Repository'
+                        : 'PR'}
               </Text>
             </Pressable>
 
@@ -1143,9 +1148,12 @@ export function HostScreen({
             const isCollapsed = collapsedGroups.has(section.key)
             const rawSection = rawSections.find((s) => s.key === section.key)
             const count = rawSection?.data.length ?? 0
-            const repoSectionColor =
-              groupMode === 'repo' ? uniqueRepoColors.get(section.title) : null
-            const repoSectionIcon = groupMode === 'repo' ? repoIconsByName.get(section.title) : null
+            const repoSectionColor = isMobileRepoGrouping(groupMode)
+              ? uniqueRepoColors.get(section.title)
+              : null
+            const repoSectionIcon = isMobileRepoGrouping(groupMode)
+              ? repoIconsByName.get(section.title)
+              : null
             return (
               <Pressable style={styles.sectionHeader} onPress={() => toggleCollapsed(section.key)}>
                 {isCollapsed ? (
@@ -1156,7 +1164,7 @@ export function HostScreen({
                 {section.icon === 'pin' && (
                   <Pin size={12} color={colors.textMuted} style={styles.sectionIcon} />
                 )}
-                {groupMode === 'repo' ? (
+                {isMobileRepoGrouping(groupMode) ? (
                   <View style={styles.sectionRepoIcon}>
                     <MobileRepoIcon
                       repoIcon={repoSectionIcon}
@@ -1188,7 +1196,7 @@ export function HostScreen({
               status={getWorktreeStatus(item)}
               repoColor={uniqueRepoColors.get(item.repo) ?? repoColor(item.repo)}
               repoIcon={repoIconsByName.get(item.repo) ?? null}
-              hideRepo={groupMode === 'repo'}
+              hideRepo={isMobileRepoGrouping(groupMode)}
               onPress={openWorktreeSession}
               onLongPress={item.workspaceKind === 'folder-workspace' ? undefined : setActionTarget}
               onToggleLineage={toggleWorktreeLineage}

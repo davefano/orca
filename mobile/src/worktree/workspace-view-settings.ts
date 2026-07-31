@@ -6,13 +6,13 @@
 import type { WorkspaceStatusDefinition } from '../../../src/shared/types'
 import { coerceMobileWorkspaceStatuses } from './mobile-workspace-statuses'
 
-export type MobileGroupMode = 'none' | 'workspaceStatus' | 'repo' | 'prStatus'
+export type MobileGroupMode = 'none' | 'workspaceStatus' | 'repo' | 'repository' | 'prStatus'
 // Desktop sort adds 'manual'; mobile renders it but sorts by server order.
 export type MobileSortMode = 'smart' | 'name' | 'recent' | 'repo' | 'manual'
 
 // Desktop PersistedUIState fields this screen syncs (a structural subset).
 export type WorkspaceViewSettings = {
-  groupBy?: 'none' | 'workspace-status' | 'repo' | 'pr-status'
+  groupBy?: 'none' | 'workspace-status' | 'repo' | 'repository' | 'pr-status'
   sortBy?: 'name' | 'smart' | 'recent' | 'repo' | 'manual'
   hideSleepingWorkspaces?: boolean
   hideDefaultBranchWorkspace?: boolean
@@ -25,6 +25,7 @@ const GROUP_TO_DESKTOP: Record<MobileGroupMode, NonNullable<WorkspaceViewSetting
   none: 'none',
   workspaceStatus: 'workspace-status',
   repo: 'repo',
+  repository: 'repository',
   prStatus: 'pr-status'
 }
 
@@ -32,6 +33,7 @@ const GROUP_FROM_DESKTOP: Record<NonNullable<WorkspaceViewSettings['groupBy']>, 
   none: 'none',
   'workspace-status': 'workspaceStatus',
   repo: 'repo',
+  repository: 'repository',
   'pr-status': 'prStatus'
 }
 
@@ -47,6 +49,12 @@ export function groupModeFromDesktop(
   groupBy: WorkspaceViewSettings['groupBy']
 ): MobileGroupMode | null {
   return groupBy ? (GROUP_FROM_DESKTOP[groupBy] ?? null) : null
+}
+
+export function isMobileRepoGrouping(
+  groupMode: MobileGroupMode
+): groupMode is Extract<MobileGroupMode, 'repo' | 'repository'> {
+  return groupMode === 'repo' || groupMode === 'repository'
 }
 
 export function sortModeFromDesktop(
