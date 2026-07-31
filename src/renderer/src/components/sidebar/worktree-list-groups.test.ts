@@ -1396,14 +1396,14 @@ describe('buildRows with pinned worktrees', () => {
     ])
   })
 
-  it('omits host context labels when a project group only has one host', () => {
+  it('preserves host context labels when a repository group only has one host', () => {
     const secondLocalWorktree: Worktree = {
       ...worktree,
       id: 'wt-local-2',
       displayName: 'local-only'
     }
     const rows = buildRows(
-      'repo',
+      'repository',
       [worktree, secondLocalWorktree],
       new Map([[repo.id, repo]]),
       null,
@@ -1430,15 +1430,18 @@ describe('buildRows with pinned worktrees', () => {
     )
 
     expect(rows).toMatchObject([
-      { type: 'header', key: 'project:github:stablyai/orca', label: 'Orca', count: 2 },
-      { type: 'item', worktree: { id: worktree.id } },
-      { type: 'item', worktree: { id: secondLocalWorktree.id } }
-    ])
-    for (const row of rows) {
-      if (row.type === 'item') {
-        expect(row.hostContextLabel).toBeUndefined()
+      { type: 'header', key: 'repository:repo:repo-1', label: 'orca', count: 2 },
+      {
+        type: 'item',
+        worktree: { id: worktree.id },
+        hostContextLabel: LOCAL_HOST_LABEL
+      },
+      {
+        type: 'item',
+        worktree: { id: secondLocalWorktree.id },
+        hostContextLabel: LOCAL_HOST_LABEL
       }
-    }
+    ])
   })
 
   it('keeps same-named repos separate without project setup identity', () => {
