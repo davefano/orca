@@ -103,6 +103,44 @@
       ]
     }
   ],
+  "upstreamWatchlist": [
+    {
+      "id": "paired-terminal-recovery",
+      "status": "await-next-stable",
+      "reason": "Air Raid depends on Ultra-hosted SSH terminals surviving parking, reconnect, and shared-control refresh without stale providers or duplicate panes.",
+      "commits": [
+        {
+          "sha": "5f7807497",
+          "subject": "feat(ssh): bound relay PTY output end to end (#11005)",
+          "role": "dependency"
+        },
+        {
+          "sha": "bf894ef15",
+          "subject": "fix(remote): recover and safely park paired terminals (#11416)",
+          "role": "workflow-fix"
+        },
+        {
+          "sha": "ab665a3ce",
+          "subject": "fix(remote): preserve terminal recovery across control refresh (#11513)",
+          "role": "workflow-fix"
+        }
+      ],
+      "decision": "Do not transplant this dependency-heavy subsystem onto v1.4.162. Keep SSH providers eagerly reconnectable operationally, then remove this watch item only after all commits land in a stable base and the Air -> Ultra -> fleet restart smoke passes."
+    },
+    {
+      "id": "runtime-reconnect-isolation",
+      "status": "already-equivalent",
+      "reason": "Runtime reconnect refreshes must not globally serialize or freeze the sidebar.",
+      "commits": [
+        {
+          "sha": "f0eca5fe3",
+          "subject": "fix(sidebar): isolate runtime reconnect refreshes (#11472)",
+          "role": "workflow-fix"
+        }
+      ],
+      "decision": "The Teal stack is patch-id equivalent today. Re-check equivalence on every stable rebase and drop the local equivalent once the stable base contains it."
+    }
+  ],
   "excluded": [
     {
       "id": "pty-pruning",
