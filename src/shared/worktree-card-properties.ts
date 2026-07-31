@@ -11,9 +11,8 @@ export const TASK_WORKTREE_CARD_PROPERTIES: WorktreeCardProperty[] = ['issue', '
 
 export const DEFAULT_WORKTREE_CARD_PROPERTIES: WorktreeCardProperty[] = [
   ...FIXED_WORKTREE_CARD_PROPERTIES,
-  // Why: this only renders when a grouped section spans multiple hosts, so
-  // keeping it enabled by default preserves the context needed to distinguish
-  // otherwise identical workspace cards without adding noise to single-host views.
+  // Why: paired clients need the execution host on every workspace card because
+  // the runtime owner can differ from the underlying SSH machine.
   'host',
   ...TASK_WORKTREE_CARD_PROPERTIES,
   'pr',

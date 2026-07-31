@@ -755,22 +755,24 @@ function getRepoHostLabel(
   const repo = repoMap.get(repoId)
   const setup = projectIndex?.setupByRepoId.get(repoId)
   if (setup) {
-    const setupHost = parseExecutionHostId(setup.hostId)
-    const hostId =
-      setupHost?.kind === 'runtime' && repo?.connectionId
-        ? toSshExecutionHostId(repo.connectionId)
-        : setup.hostId
+    const hostId = getDisplayedExecutionHostId(setup.hostId, repo)
     return hostLabelById?.get(hostId) ?? getExecutionHostLabel(hostId)
   }
   if (!repo) {
     return null
   }
-  const executionHost = parseExecutionHostId(repo.executionHostId)
-  const hostId =
-    executionHost?.kind === 'runtime' && repo.connectionId
-      ? toSshExecutionHostId(repo.connectionId)
-      : getRepoExecutionHostId(repo)
+  const hostId = getDisplayedExecutionHostId(getRepoExecutionHostId(repo), repo)
   return hostLabelById?.get(hostId) ?? getExecutionHostLabel(hostId)
+}
+
+function getDisplayedExecutionHostId(
+  hostId: ExecutionHostId,
+  repo: Repo | undefined
+): ExecutionHostId {
+  const parsedHost = parseExecutionHostId(hostId)
+  return parsedHost?.kind === 'runtime' && repo?.connectionId
+    ? toSshExecutionHostId(repo.connectionId)
+    : hostId
 }
 
 function getHostContextLabels(
@@ -798,7 +800,11 @@ function getWorktreeHostContextLabels(
 ): Map<string, string> | undefined {
   const labelsByWorktreeId = new Map<string, string>()
   for (const worktree of worktrees) {
-    const hostId = getWorktreeExecutionHostId(worktree, repoMap.get(worktree.repoId), defaultHostId)
+    const repo = repoMap.get(worktree.repoId)
+    const hostId = getDisplayedExecutionHostId(
+      getWorktreeExecutionHostId(worktree, repo, defaultHostId),
+      repo
+    )
     labelsByWorktreeId.set(worktree.id, hostLabelById?.get(hostId) ?? getExecutionHostLabel(hostId))
   }
   return labelsByWorktreeId.size > 0 ? labelsByWorktreeId : undefined
@@ -934,7 +940,9 @@ function withRepoSectionDisplayLabels(entries: readonly OrderedGroupEntry[]): Or
     if (!group.repo || (labelCounts.get(group.label) ?? 0) < 2) {
       return [key, group]
     }
-    const hostLabel = getExecutionHostLabel(getRepoExecutionHostId(group.repo))
+    const hostLabel = getExecutionHostLabel(
+      getDisplayedExecutionHostId(getRepoExecutionHostId(group.repo), group.repo)
+    )
     return [key, { ...group, label: `${group.label} · ${hostLabel}` }]
   })
 }
