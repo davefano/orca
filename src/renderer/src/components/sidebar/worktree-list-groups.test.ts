@@ -543,6 +543,7 @@ describe('buildRows with pinned worktrees', () => {
       id: 'wheeljack-teal',
       displayName: 'Teal @ Wheeljack',
       connectionId: 'wheeljack',
+      executionHostId: 'runtime:ultra-magnus',
       repoIcon: {
         type: 'image',
         src: 'https://github.com/Teal-HQ.png',
@@ -561,6 +562,7 @@ describe('buildRows with pinned worktrees', () => {
       path: '/Users/davidfano/workspaces/teal',
       displayName: 'Teal @ Ironhide',
       connectionId: 'ironhide',
+      executionHostId: 'runtime:ultra-magnus',
       gitRemoteIdentity: {
         canonicalKey: 'GITHUB.COM/TEAL-HQ/TEAL',
         remoteName: 'origin',
