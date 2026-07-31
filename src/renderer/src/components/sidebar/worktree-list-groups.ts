@@ -778,39 +778,35 @@ function getRepoHostLabel(
   return hostLabelById?.get(hostId) ?? getExecutionHostLabel(hostId)
 }
 
-function getMixedHostContextLabels(
+function getHostContextLabels(
   group: WorktreeGroupEntry,
   repoMap: Map<string, Repo>,
   projectIndex: ProjectGroupingIndex | null,
   hostLabelById: ReadonlyMap<string, string> | undefined
 ): Map<string, string> | undefined {
   const labelsByRepoId = new Map<string, string>()
-  const uniqueLabels = new Set<string>()
   for (const repoId of group.repoIds) {
     const label = getRepoHostLabel(repoId, repoMap, projectIndex, hostLabelById)
     if (!label) {
       continue
     }
     labelsByRepoId.set(repoId, label)
-    uniqueLabels.add(label)
   }
-  return uniqueLabels.size > 1 ? labelsByRepoId : undefined
+  return labelsByRepoId.size > 0 ? labelsByRepoId : undefined
 }
 
-function getMixedWorktreeHostContextLabels(
+function getWorktreeHostContextLabels(
   worktrees: readonly Worktree[],
   repoMap: Map<string, Repo>,
   hostLabelById: ReadonlyMap<string, string> | undefined,
   defaultHostId: ExecutionHostId
 ): Map<string, string> | undefined {
   const labelsByWorktreeId = new Map<string, string>()
-  const uniqueHostIds = new Set<ExecutionHostId>()
   for (const worktree of worktrees) {
     const hostId = getWorktreeExecutionHostId(worktree, repoMap.get(worktree.repoId), defaultHostId)
-    uniqueHostIds.add(hostId)
     labelsByWorktreeId.set(worktree.id, hostLabelById?.get(hostId) ?? getExecutionHostLabel(hostId))
   }
-  return uniqueHostIds.size > 1 ? labelsByWorktreeId : undefined
+  return labelsByWorktreeId.size > 0 ? labelsByWorktreeId : undefined
 }
 
 function getHostWorktreeCounts(
@@ -1119,7 +1115,7 @@ export function buildRows(
     pinnedDisplayPolicy === 'duplicate-in-groups'
       ? worktrees
       : worktrees.filter((worktree) => !worktree.isPinned)
-  const mixedWorktreeHostContextLabels = getMixedWorktreeHostContextLabels(
+  const worktreeHostContextLabels = getWorktreeHostContextLabels(
     naturalWorktrees,
     repoMap,
     hostLabelById,
@@ -1164,7 +1160,7 @@ export function buildRows(
           collapsedGroups,
           groupDepth: 0,
           sectionKey: ALL_GROUP_KEY,
-          hostContextLabelByWorktreeId: mixedWorktreeHostContextLabels,
+          hostContextLabelByWorktreeId: worktreeHostContextLabels,
           cyclicLineageIds
         })
       }
@@ -1405,11 +1401,11 @@ export function buildRows(
           ? orderMainWorktreeFirst(group.items)
           : group.items
         const hostContextLabelByRepoId = isRepoSectionGrouping(groupBy)
-          ? getMixedHostContextLabels(group, repoMap, projectIndex, hostLabelById)
+          ? getHostContextLabels(group, repoMap, projectIndex, hostLabelById)
           : undefined
         const hostContextLabelByWorktreeId = isRepoSectionGrouping(groupBy)
           ? undefined
-          : mixedWorktreeHostContextLabels
+          : worktreeHostContextLabels
         appendWorktreeRows(result, items, repoMap, lineageById, worktreeMap, {
           nestLineage,
           collapsedGroups,
