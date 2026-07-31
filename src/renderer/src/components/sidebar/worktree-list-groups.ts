@@ -926,12 +926,26 @@ function withRepoSectionDisplayLabels(entries: readonly OrderedGroupEntry[]): Or
     return [...entries]
   }
   const labelsByPath = getRepoDisplayLabelsByPath(repos)
-  return entries.map(([key, group]) => [
-    key,
-    group.repo
-      ? { ...group, label: labelsByPath.get(getRepoDisplayLabelKey(group.repo)) ?? group.label }
-      : group
-  ])
+  const labeledEntries = entries.map(
+    ([key, group]) =>
+      [
+        key,
+        group.repo
+          ? { ...group, label: labelsByPath.get(getRepoDisplayLabelKey(group.repo)) ?? group.label }
+          : group
+      ] satisfies OrderedGroupEntry
+  )
+  const labelCounts = new Map<string, number>()
+  for (const [, group] of labeledEntries) {
+    labelCounts.set(group.label, (labelCounts.get(group.label) ?? 0) + 1)
+  }
+  return labeledEntries.map(([key, group]) => {
+    if (!group.repo || (labelCounts.get(group.label) ?? 0) < 2) {
+      return [key, group]
+    }
+    const hostLabel = getExecutionHostLabel(getRepoExecutionHostId(group.repo))
+    return [key, { ...group, label: `${group.label} · ${hostLabel}` }]
+  })
 }
 
 /**
@@ -1289,7 +1303,11 @@ export function buildRows(
     // Why: project header order is its own user choice (projectOrderBy),
     // decoupled from workspace sortBy. Manual uses the canonical repoOrder so
     // header drag has a stable source of truth; Recent follows activity.
-    const entries = sortProjectEntries(Array.from(grouped.entries()), projectOrderBy, repoOrder)
+    const entries = sortProjectEntries(
+      Array.from(grouped.entries()),
+      groupBy === 'repository' ? 'manual' : projectOrderBy,
+      repoOrder
+    )
     // Why: large imported repo sets can have one group per repo; spreading
     // those entries into push can exceed V8's argument limit.
     for (const entry of entries) {
@@ -1407,7 +1425,7 @@ export function buildRows(
 
   if (groupBy !== 'repo' || projectGroups.length === 0) {
     appendOrderedGroups(
-      groupBy === 'repo' ? withRepoSectionDisplayLabels(orderedGroups) : orderedGroups
+      isRepoSectionGrouping(groupBy) ? withRepoSectionDisplayLabels(orderedGroups) : orderedGroups
     )
     return result
   }

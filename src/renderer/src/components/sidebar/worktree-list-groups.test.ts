@@ -636,6 +636,80 @@ describe('buildRows with pinned worktrees', () => {
     ])
   })
 
+  it('disambiguates identical repository labels by execution host', () => {
+    const localRepo: Repo = { ...repo, path: '/tmp/orca', displayName: 'orca' }
+    const sshRepo: Repo = {
+      ...repo,
+      id: 'repo-ssh',
+      path: '/tmp/orca',
+      displayName: 'orca',
+      connectionId: 'gpu-vm'
+    }
+    const sshWorktree: Worktree = {
+      ...worktree,
+      id: 'wt-ssh',
+      repoId: sshRepo.id,
+      path: '/tmp/orca-ssh-feature'
+    }
+
+    const rows = buildRows(
+      'repository',
+      [worktree, sshWorktree],
+      new Map([
+        [localRepo.id, localRepo],
+        [sshRepo.id, sshRepo]
+      ]),
+      null,
+      new Set()
+    )
+
+    expect(
+      rows.filter((row) => row.type === 'header').map((row) => ({ key: row.key, label: row.label }))
+    ).toEqual([
+      { key: `repository:repo:${localRepo.id}`, label: `tmp/orca · ${LOCAL_HOST_LABEL}` },
+      { key: `repository:repo:${sshRepo.id}`, label: 'tmp/orca · gpu-vm' }
+    ])
+  })
+
+  it('keeps Repository order manual when the hidden Project preference is recent', () => {
+    const firstRepo: Repo = { ...repo, id: 'repo-first', displayName: 'first' }
+    const secondRepo: Repo = { ...repo, id: 'repo-second', displayName: 'second' }
+    const firstWorktree: Worktree = {
+      ...worktree,
+      id: 'wt-first',
+      repoId: firstRepo.id,
+      lastActivityAt: 10
+    }
+    const secondWorktree: Worktree = {
+      ...worktree,
+      id: 'wt-second',
+      repoId: secondRepo.id,
+      lastActivityAt: 500
+    }
+
+    const rows = buildRows(
+      'repository',
+      [firstWorktree, secondWorktree],
+      new Map([
+        [firstRepo.id, firstRepo],
+        [secondRepo.id, secondRepo]
+      ]),
+      null,
+      new Set(),
+      new Map([
+        [firstRepo.id, 0],
+        [secondRepo.id, 1]
+      ]),
+      undefined,
+      'recent'
+    )
+
+    expect(rows.filter((row) => row.type === 'header').map((row) => row.key)).toEqual([
+      `repository:repo:${firstRepo.id}`,
+      `repository:repo:${secondRepo.id}`
+    ])
+  })
+
   it('keeps case-distinct self-hosted remote paths separate', () => {
     const upperRepo: Repo = {
       ...repo,

@@ -240,6 +240,24 @@ describe('getWorktreeStatus', () => {
 })
 
 describe('buildSections', () => {
+  it('renders the persisted Repository mode without dropping workspaces', () => {
+    const alpha = worktree({ worktreeId: 'alpha', repo: 'orca' })
+    const beta = worktree({ worktreeId: 'beta', repo: 'orca' })
+
+    const sections = buildSections(
+      [alpha, beta],
+      'name',
+      { filterRepoIds: new Set(), hideSleeping: false, hideDefaultBranch: false },
+      '',
+      'repository',
+      new Set()
+    )
+
+    expect(sections).toHaveLength(1)
+    expect(sections[0]?.title).toBe('orca')
+    expect(sections[0]?.data.map((item) => item.worktreeId)).toEqual(['alpha', 'beta'])
+  })
+
   it('matches desktop Name sort by display name', () => {
     const beta = worktree({ worktreeId: 'beta', displayName: 'Beta', repo: 'aaa' })
     const alpha = worktree({ worktreeId: 'alpha', displayName: 'Alpha', repo: 'zzz' })
