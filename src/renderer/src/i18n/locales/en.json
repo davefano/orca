@@ -3073,6 +3073,28 @@
       },
       "status": {
         "bar": {
+          "SshPtyHealthPanel": {
+            "safeToPrune": "Safe to prune",
+            "recoverFirst": "Recover first",
+            "currentRelay": "Current relay",
+            "protected": "Protected",
+            "orcaRelayPid": "Orca relay · PID {{value0}}",
+            "agentPtyHostPid": "Agent PTY host · PID {{value0}}",
+            "terminalAppPid": "Terminal.app · PID {{value0}}",
+            "processPid": "Process · PID {{value0}}",
+            "healthSummary": "{{value0}}/{{value1}} PTYs · {{value2}} free",
+            "orcaPtys": "{{value0}} Orca PTYs",
+            "title": "SSH PTY health",
+            "refresh": "Refresh SSH PTY health",
+            "hideOwners": "Hide {{value0}} PTY owners",
+            "showOwners": "Show {{value0}} PTY owners",
+            "ownerCounts": "{{value0}} allocated · {{value1}} attached · {{value2}} leaked",
+            "pruneSafeRelay": "Prune safe relay PID {{value0}}",
+            "pruneTitle": "Prune idle PTYs on {{value0}}?",
+            "pruneDescription": "This sends SIGTERM only after the host rechecks that relay PID {{value0}} still contains no agents or foreground workloads. It should release {{value1}} PTYs.",
+            "cancel": "Cancel",
+            "pruneCount": "Prune {{value0}} PTYs"
+          },
           "PetStatusSegment": {
             "3668339495": "Remove {{value0}}",
             "cd8c6c654c": "Pet settings…",
