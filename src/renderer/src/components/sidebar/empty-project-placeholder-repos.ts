@@ -1,5 +1,5 @@
 import type { Repo, Worktree } from '../../../../shared/types'
-import type { WorktreeGroupBy } from './worktree-list-groups'
+import { isRepoSectionGrouping, type WorktreeGroupBy } from './worktree-list-groups'
 
 export function getEmptyProjectPlaceholderRepoIds(args: {
   groupBy: WorktreeGroupBy
@@ -8,7 +8,7 @@ export function getEmptyProjectPlaceholderRepoIds(args: {
   visibleWorktrees: readonly Worktree[]
   filterRepoIds: readonly string[]
 }): Set<string> {
-  if (args.groupBy !== 'repo' && args.groupBy !== 'repository') {
+  if (!isRepoSectionGrouping(args.groupBy)) {
     return new Set()
   }
 
