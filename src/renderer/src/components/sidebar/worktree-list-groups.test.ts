@@ -573,12 +573,14 @@ describe('buildRows with pinned worktrees', () => {
       ...worktree,
       id: 'wt-wheeljack-teal',
       repoId: wheeljackRepo.id,
+      hostId: 'runtime:ultra-magnus',
       path: '/Users/davidfano/workspaces/teal-wheeljack'
     }
     const ironhideWorktree: Worktree = {
       ...worktree,
       id: 'wt-ironhide-teal',
       repoId: ironhideRepo.id,
+      hostId: 'runtime:ultra-magnus',
       path: '/Users/davidfano/workspaces/teal-ironhide'
     }
 
@@ -610,6 +612,30 @@ describe('buildRows with pinned worktrees', () => {
       },
       { type: 'item', worktree: { id: wheeljackWorktree.id }, hostContextLabel: 'wheeljack' },
       { type: 'item', worktree: { id: ironhideWorktree.id }, hostContextLabel: 'ironhide' }
+    ])
+
+    const statusRows = buildRows(
+      'workspace-status',
+      [wheeljackWorktree, ironhideWorktree],
+      new Map([
+        [wheeljackRepo.id, wheeljackRepo],
+        [ironhideRepo.id, ironhideRepo]
+      ]),
+      null,
+      new Set(),
+      undefined,
+      undefined,
+      undefined,
+      {},
+      new Map([
+        [wheeljackWorktree.id, wheeljackWorktree],
+        [ironhideWorktree.id, ironhideWorktree]
+      ])
+    )
+
+    expect(statusRows.filter((row) => row.type === 'item')).toMatchObject([
+      { worktree: { id: wheeljackWorktree.id }, hostContextLabel: 'wheeljack' },
+      { worktree: { id: ironhideWorktree.id }, hostContextLabel: 'ironhide' }
     ])
   })
 
