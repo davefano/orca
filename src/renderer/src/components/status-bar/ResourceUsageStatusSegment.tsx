@@ -1751,13 +1751,21 @@ export function ResourceUsageStatusSegment({
         {(sshPtyHealth.length > 0 || sshPtyHealthLoading) && (
           <div className="border-b border-border px-3 py-2 text-[10px]">
             <div className="mb-1.5 flex items-center justify-between uppercase tracking-wide text-muted-foreground">
-              <span>SSH PTY health</span>
+              <span>
+                {translate(
+                  'auto.components.status.bar.ResourceUsageStatusSegment.sshPtyHealthTitle',
+                  'SSH PTY health'
+                )}
+              </span>
               <button
                 type="button"
                 onClick={() => void refreshSshPtyHealth()}
                 disabled={sshPtyHealthLoading}
                 className="rounded p-0.5 transition-colors hover:bg-accent disabled:opacity-40"
-                aria-label="Refresh SSH PTY health"
+                aria-label={translate(
+                  'auto.components.status.bar.ResourceUsageStatusSegment.refreshSshPtyHealth',
+                  'Refresh SSH PTY health'
+                )}
               >
                 <RotateCw className={cn('size-3', sshPtyHealthLoading && 'animate-spin')} />
               </button>
@@ -1776,10 +1784,23 @@ export function ResourceUsageStatusSegment({
                     <span className="truncate text-foreground">{result.label}</span>
                     <span className={cn('shrink-0 tabular-nums', tone)}>
                       {health && health.systemAllocated !== null && health.systemCapacity !== null
-                        ? `${health.systemAllocated}/${health.systemCapacity} PTYs · ${health.systemAvailable} free · ${health.relayOwned} Orca`
+                        ? translate(
+                            'auto.components.status.bar.ResourceUsageStatusSegment.sshPtyHealthSummary',
+                            '{{value0}}/{{value1}} PTYs · {{value2}} free · {{value3}} Orca',
+                            {
+                              value0: health.systemAllocated,
+                              value1: health.systemCapacity,
+                              value2: health.systemAvailable,
+                              value3: health.relayOwned
+                            }
+                          )
                         : (result.error ??
                           health?.diagnosticError ??
-                          `${health?.relayOwned ?? 0} Orca PTYs`)}
+                          translate(
+                            'auto.components.status.bar.ResourceUsageStatusSegment.sshPtyHealthOrcaPtys',
+                            '{{value0}} Orca PTYs',
+                            { value0: health?.relayOwned ?? 0 }
+                          ))}
                     </span>
                   </div>
                 )
