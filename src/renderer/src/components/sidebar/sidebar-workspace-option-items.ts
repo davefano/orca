@@ -80,6 +80,10 @@ export type WorktreeCardPropertyOption = {
   label: string
 }
 
+export function getHostWorktreeCardPropertyLabel(): string {
+  return translate('auto.components.sidebar.SidebarWorkspaceOptionsMenu.host', 'Host')
+}
+
 const BASE_WORKTREE_CARD_PROPERTY_OPTIONS: WorktreeCardPropertyOption[] = [
   {
     id: 'status',
@@ -92,7 +96,7 @@ const BASE_WORKTREE_CARD_PROPERTY_OPTIONS: WorktreeCardPropertyOption[] = [
     id: 'host',
     properties: ['host'],
     get label() {
-      return translate('auto.components.sidebar.SidebarWorkspaceOptionsMenu.host', 'Host')
+      return getHostWorktreeCardPropertyLabel()
     }
   },
   {
