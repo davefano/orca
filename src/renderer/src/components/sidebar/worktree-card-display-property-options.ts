@@ -1,11 +1,12 @@
 import type { WorktreeCardProperty } from '../../../../shared/types'
 import { translate } from '@/i18n/i18n'
+import { getHostWorktreeCardPropertyLabel } from './sidebar-workspace-option-items'
 
 export const PROPERTY_OPTIONS: { id: WorktreeCardProperty; label: string }[] = [
   {
     id: 'host',
     get label() {
-      return translate('auto.components.sidebar.SidebarWorkspaceOptionsMenu.host', 'Host')
+      return getHostWorktreeCardPropertyLabel()
     }
   },
   {

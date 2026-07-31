@@ -1,7 +1,9 @@
+import type { PersistedUIState } from '../../../../shared/types'
+
 export function shouldShowProjectOrderManualDefaultNotice(args: {
   persistedUIReady: boolean
   projectOrderManualDefaultNoticeDismissed: boolean
-  groupBy: 'none' | 'workspace-status' | 'repo' | 'repository' | 'pr-status'
+  groupBy: PersistedUIState['groupBy']
   projectOrderBy: 'manual' | 'recent'
   repoCount: number
 }): boolean {
