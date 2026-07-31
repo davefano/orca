@@ -9,6 +9,7 @@ import type {
   Repo,
   ProjectGroup,
   ProjectOrderBy,
+  PersistedUIState,
   Worktree,
   WorktreeLineage,
   WorkspaceStatusDefinition
@@ -53,11 +54,14 @@ import {
 } from './worktree-lineage-projection'
 
 export { getLineageRenderInfo } from './worktree-lineage-projection'
-import { getProjectIdentityKey } from '../../../../shared/project-host-setup-projection'
+import {
+  getProjectIdentityKey,
+  hasProjectRemoteIdentity
+} from '../../../../shared/project-host-setup-projection'
 
 export { branchName }
 
-export type WorktreeGroupBy = 'none' | 'workspace-status' | 'repo' | 'repository' | 'pr-status'
+export type WorktreeGroupBy = PersistedUIState['groupBy']
 
 export function isRepoSectionGrouping(
   groupBy: WorktreeGroupBy
@@ -331,7 +335,7 @@ function getRepositoryGroupingForRepo(
     }
   }
   const identityKey = getProjectIdentityKey(repo)
-  if (identityKey === `repo:${repo.id}`) {
+  if (!hasProjectRemoteIdentity(repo)) {
     return {
       key: `repository:repo:${repoId}`,
       label: repo.displayName,
@@ -1300,53 +1304,52 @@ export function buildRows(
     for (const [key, group] of groupsToAppend) {
       const isCollapsed = collapsedGroups.has(key)
       const repo = group.repo
-      const header =
-        isRepoSectionGrouping(groupBy)
-          ? {
-              type: 'header' as const,
-              key,
-              label: group.label,
-              count: group.items.length,
-              tone: PROJECT_GROUP_META.tone,
-              icon: PROJECT_GROUP_META.icon,
-              repo,
-              projectGroupDepth
-            }
-          : groupBy === 'workspace-status'
-            ? (() => {
-                const workspaceStatus =
-                  getWorkspaceStatusFromGroupKey(key, workspaceStatuses) ??
-                  workspaceStatuses[0]?.id ??
-                  'in-progress'
-                const definition = workspaceStatuses.find((status) => status.id === workspaceStatus)
-                const meta = getWorkspaceStatusVisualMeta(definition ?? workspaceStatus)
-                return {
-                  type: 'header' as const,
-                  key,
-                  label: definition?.label ?? workspaceStatus,
-                  count: group.items.length,
-                  tone: meta.tone,
-                  icon: meta.icon,
-                  hostWorktreeCounts: getHostWorktreeCounts(group.items, repoMap, defaultHostId),
-                  hostWorktreeIds: getHostWorktreeIds(group.items, repoMap, defaultHostId),
-                  worktreeIds: group.items.map((worktree) => worktree.id)
-                }
-              })()
-            : (() => {
-                const prGroup = key.replace(/^pr:/, '') as PRGroupKey
-                const meta = PR_GROUP_META[prGroup]
-                return {
-                  type: 'header' as const,
-                  key,
-                  label: meta.label,
-                  count: group.items.length,
-                  tone: meta.tone,
-                  icon: meta.icon,
-                  hostWorktreeCounts: getHostWorktreeCounts(group.items, repoMap, defaultHostId),
-                  hostWorktreeIds: getHostWorktreeIds(group.items, repoMap, defaultHostId),
-                  worktreeIds: group.items.map((worktree) => worktree.id)
-                }
-              })()
+      const header = isRepoSectionGrouping(groupBy)
+        ? {
+            type: 'header' as const,
+            key,
+            label: group.label,
+            count: group.items.length,
+            tone: PROJECT_GROUP_META.tone,
+            icon: PROJECT_GROUP_META.icon,
+            repo,
+            projectGroupDepth
+          }
+        : groupBy === 'workspace-status'
+          ? (() => {
+              const workspaceStatus =
+                getWorkspaceStatusFromGroupKey(key, workspaceStatuses) ??
+                workspaceStatuses[0]?.id ??
+                'in-progress'
+              const definition = workspaceStatuses.find((status) => status.id === workspaceStatus)
+              const meta = getWorkspaceStatusVisualMeta(definition ?? workspaceStatus)
+              return {
+                type: 'header' as const,
+                key,
+                label: definition?.label ?? workspaceStatus,
+                count: group.items.length,
+                tone: meta.tone,
+                icon: meta.icon,
+                hostWorktreeCounts: getHostWorktreeCounts(group.items, repoMap, defaultHostId),
+                hostWorktreeIds: getHostWorktreeIds(group.items, repoMap, defaultHostId),
+                worktreeIds: group.items.map((worktree) => worktree.id)
+              }
+            })()
+          : (() => {
+              const prGroup = key.replace(/^pr:/, '') as PRGroupKey
+              const meta = PR_GROUP_META[prGroup]
+              return {
+                type: 'header' as const,
+                key,
+                label: meta.label,
+                count: group.items.length,
+                tone: meta.tone,
+                icon: meta.icon,
+                hostWorktreeCounts: getHostWorktreeCounts(group.items, repoMap, defaultHostId),
+                hostWorktreeIds: getHostWorktreeIds(group.items, repoMap, defaultHostId),
+                worktreeIds: group.items.map((worktree) => worktree.id)
+              }
+            })()
 
       result.push(header)
       if (!isCollapsed) {
@@ -1389,27 +1392,15 @@ export function buildRows(
         const hostContextLabelByWorktreeId = isRepoSectionGrouping(groupBy)
           ? undefined
           : mixedWorktreeHostContextLabels
-        if (isRepoSectionGrouping(groupBy)) {
-          appendWorktreeRows(result, items, repoMap, lineageById, worktreeMap, {
-            nestLineage,
-            collapsedGroups,
-            groupDepth: projectGroupDepth,
-            sectionKey: key,
-            hostContextLabelByRepoId,
-            hostContextLabelByWorktreeId,
-            cyclicLineageIds
-          })
-        } else {
-          appendWorktreeRows(result, items, repoMap, lineageById, worktreeMap, {
-            nestLineage,
-            collapsedGroups,
-            groupDepth: projectGroupDepth,
-            sectionKey: key,
-            hostContextLabelByRepoId,
-            hostContextLabelByWorktreeId,
-            cyclicLineageIds
-          })
-        }
+        appendWorktreeRows(result, items, repoMap, lineageById, worktreeMap, {
+          nestLineage,
+          collapsedGroups,
+          groupDepth: projectGroupDepth,
+          sectionKey: key,
+          hostContextLabelByRepoId,
+          hostContextLabelByWorktreeId,
+          cyclicLineageIds
+        })
       }
     }
   }
