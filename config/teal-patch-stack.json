@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "base": {
+    "channel": "stable",
+    "tag": "v1.4.162",
+    "commit": "e058429e1"
+  },
+  "policy": {
+    "description": "Keep OrcaTeal on upstream stable releases and carry only workflow-critical Teal patches that are not upstream.",
+    "requiredTopology": "Air Raid UI -> Ultra Magnus runtime -> fleet SSH hosts",
+    "forbiddenTopology": "Air Raid UI -> Ultra Magnus runtime -> Air Raid SSH",
+    "releaseBranches": ["teal/orca-stable", "teal/orcateal-stable"],
+    "upstreamReviewRule": "Every rebase must run verify:teal-patch-stack against the new stable tag. Exact upstream equivalents require an explicit keep/drop decision before release."
+  },
+  "patches": [
+    {
+      "id": "resource-manager-dragging",
+      "order": 10,
+      "disposition": "required",
+      "reason": "Dave's reviewed draggable Resource Manager behavior is not in stable upstream.",
+      "upstream": { "kind": "pull-request", "reference": "stablyai/orca#9062", "status": "open" },
+      "sourceCommits": [
+        {
+          "sha": "0667190d1",
+          "subject": "fix(resource-manager): rebase draggable popover (#9062)"
+        },
+        { "sha": "c88459026", "subject": "fix(resource-manager): reset drag state on close" },
+        { "sha": "5fd82ec12", "subject": "fix(resource-manager): preserve position while closing" }
+      ],
+      "requiredPaths": [
+        "src/renderer/src/components/status-bar/resource-manager-drag-bounds.ts",
+        "src/renderer/src/components/status-bar/ResourceUsageStatusSegment.dragging.test.ts"
+      ],
+      "verification": [
+        "pnpm vitest run --config config/vitest.config.ts src/renderer/src/components/status-bar/ResourceUsageStatusSegment.dragging.test.ts src/renderer/src/components/status-bar/resource-manager-drag-bounds.test.ts"
+      ]
+    },
+    {
+      "id": "repository-grouping-and-hosts",
+      "order": 20,
+      "disposition": "required",
+      "reason": "Teal groups mirrored fleet workspaces by repository and must show the actual SSH host rather than the Ultra runtime owner.",
+      "upstream": { "kind": "internal", "reference": null, "status": "teal-only" },
+      "sourceCommits": [
+        { "sha": "56e70f9b0", "subject": "feat(sidebar): group workspaces by repository" },
+        { "sha": "df8a81ddd", "subject": "feat(sidebar): add host property toggle" },
+        {
+          "sha": "1a3ff099b",
+          "subject": "refactor(sidebar): simplify repository grouping integration"
+        },
+        { "sha": "e9f5449e8", "subject": "fix(sidebar): harden repository grouping integration" },
+        { "sha": "890dcc0ad", "subject": "fix(sidebar): use repository id for missing metadata" },
+        { "sha": "5a1cf6a8f", "subject": "fix(sidebar): always provide host labels" },
+        { "sha": "8427346e1", "subject": "fix(sidebar): show mirrored SSH hosts" }
+      ],
+      "requiredPaths": [
+        "src/renderer/src/components/sidebar/worktree-list-groups.ts",
+        "src/renderer/src/components/sidebar/worktree-list-groups.test.ts",
+        "src/shared/worktree-card-properties.ts"
+      ],
+      "verification": [
+        "pnpm vitest run --config config/vitest.config.ts src/renderer/src/components/sidebar/worktree-list-groups.test.ts src/renderer/src/components/sidebar/WorktreeCardDisplayMenuSection.test.tsx src/shared/worktree-card-properties.test.ts"
+      ]
+    },
+    {
+      "id": "ssh-pty-health-read-only",
+      "order": 30,
+      "disposition": "required",
+      "reason": "Fleet hosts need authoritative PTY pressure visibility before terminal allocation fails; mutation is deliberately excluded.",
+      "upstream": {
+        "kind": "internal",
+        "reference": "davefano/orca#1",
+        "status": "partially-carried-read-only"
+      },
+      "sourceCommits": [
+        { "sha": "00ef569aa", "subject": "feat(resources): surface SSH PTY health" }
+      ],
+      "requiredPaths": ["src/relay/pty-health.ts", "src/relay/pty-health.test.ts"],
+      "verification": [
+        "pnpm vitest run --config config/vitest.config.ts src/relay/pty-health.test.ts src/main/runtime/rpc/methods/ssh.test.ts"
+      ]
+    },
+    {
+      "id": "orcateal-packaging",
+      "order": 40,
+      "disposition": "required-packaging-branch",
+      "reason": "The daily internal build needs an isolated name, bundle ID, profile, updater policy, and build identity.",
+      "upstream": { "kind": "internal", "reference": null, "status": "teal-only" },
+      "sourceCommits": [
+        { "sha": "216c0bb33", "subject": "build: package isolated OrcaTeal app" },
+        { "sha": "db1df6236", "subject": "test(packaging): assert isolated OrcaTeal identity" },
+        { "sha": "ea3ae059c", "subject": "test(packaging): align compatibility identity" },
+        { "sha": "657753765", "subject": "refactor(teal): centralize build and drag state" },
+        { "sha": "9f0f8f1d5", "subject": "test(packaging): reuse OrcaTeal app identity" }
+      ],
+      "requiredPaths": ["src/shared/local-build-compatibility-contract.json"],
+      "verification": [
+        "pnpm vitest run --config config/vitest.config.ts config/app-identity.test.ts"
+      ]
+    }
+  ],
+  "excluded": [
+    {
+      "id": "pty-pruning",
+      "subjects": [
+        "feat(resources): add guarded PTY inventory and pruning",
+        "fix(resources): localize PTY health controls"
+      ],
+      "reason": "Keep daily runtime diagnostics read-only until upstream relay lifecycle is stable."
+    },
+    {
+      "id": "legacy-terminal-recovery",
+      "subjects": ["fix(terminal): preserve terminals across relay generations"],
+      "reason": "Upstream now owns terminal restoration; do not restore the old broad Teal recovery patch wholesale."
+    },
+    {
+      "id": "air-client-workspace-isolation",
+      "subjects": ["fix(runtime): isolate client workspace state"],
+      "reason": "Reintroduce only with a focused failing Air/Ultra reproduction proving stable upstream still needs it."
+    }
+  ]
+}
