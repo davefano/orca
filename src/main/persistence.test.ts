@@ -7266,6 +7266,7 @@ describe('Store', () => {
     expect(store.getUI().worktreeCardProperties).toEqual([
       'status',
       'unread',
+      'host',
       'issue',
       'linear-issue',
       'jira-issue',
@@ -7299,6 +7300,7 @@ describe('Store', () => {
       'status',
       'unread',
       'ci',
+      'host',
       'issue',
       'linear-issue',
       'pr',
@@ -7306,6 +7308,39 @@ describe('Store', () => {
       'inline-agents'
     ])
     expect(store.getUI().worktreeCardProperties).not.toContain('branch')
+  })
+
+  it('adds Host to an existing defaulted detailed card preset', async () => {
+    writeDataFile({
+      schemaVersion: 1,
+      repos: [],
+      worktreeMeta: {},
+      settings: { compactWorktreeCards: false },
+      ui: {
+        worktreeCardProperties: [
+          'status',
+          'unread',
+          'issue',
+          'linear-issue',
+          'jira-issue',
+          'pr',
+          'automation',
+          'cli',
+          'comment',
+          'ports',
+          'inline-agents'
+        ],
+        _worktreeCardModeDefaulted: true,
+        _inlineAgentsDefaultedForAllUsers: true,
+        _expandedWorktreeCardPropertiesDefaulted: true
+      },
+      githubCache: { pr: {}, issue: {} },
+      workspaceSession: {}
+    })
+    const store = await createStore()
+
+    expect(store.getUI().worktreeCardProperties).toContain('host')
+    expect(store.getUI()._worktreeCardModeDefaulted).toBe(true)
   })
 
   it('preserves deliberate post-migration card property opt-outs', async () => {

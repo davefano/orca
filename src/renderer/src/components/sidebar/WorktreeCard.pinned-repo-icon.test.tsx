@@ -197,6 +197,28 @@ describe('WorktreeCard pinned repo icon', () => {
   )
 
   it(
+    'shows the enabled host context pill in Compact cards',
+    async () => {
+      settings = { compactWorktreeCards: true }
+      worktreeCardProperties = ['host']
+      const { default: WorktreeCard } = await import('./WorktreeCard')
+
+      const markup = renderToStaticMarkup(
+        <WorktreeCard
+          worktree={makeWorktree({ isPinned: false })}
+          repo={makeRepo()}
+          isActive={false}
+          hostContextLabel="Wheeljack"
+        />
+      )
+
+      expect(markup).toContain('data-worktree-card-meta-row=""')
+      expect(markup).toContain('Wheeljack')
+    },
+    WORKTREE_CARD_IMPORT_TIMEOUT_MS
+  )
+
+  it(
     'hides the host context pill when the Host property is disabled',
     async () => {
       settings = { compactWorktreeCards: false }

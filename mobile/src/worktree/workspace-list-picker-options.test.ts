@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { WORKSPACE_SORT_OPTIONS } from './workspace-list-picker-options'
+import { WORKSPACE_GROUP_OPTIONS, WORKSPACE_SORT_OPTIONS } from './workspace-list-picker-options'
 
 describe('WORKSPACE_SORT_OPTIONS', () => {
   it('keeps the persisted sort values stable for desktop compatibility', () => {
@@ -18,5 +18,16 @@ describe('WORKSPACE_SORT_OPTIONS', () => {
       label: 'Agent activity',
       subtitle: 'Agents that need attention, then recent activity'
     })
+  })
+})
+
+describe('WORKSPACE_GROUP_OPTIONS', () => {
+  it('keeps Project and Repository as distinct persisted grouping modes', () => {
+    expect(WORKSPACE_GROUP_OPTIONS).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ value: 'repo', label: 'Project' }),
+        expect.objectContaining({ value: 'repository', label: 'Repository' })
+      ])
+    )
   })
 })

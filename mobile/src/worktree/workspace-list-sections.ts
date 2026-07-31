@@ -8,7 +8,11 @@ import {
 import { applyMobileWorkspaceLineage } from './mobile-workspace-lineage'
 import { getPRGroupKey, PR_GROUP_LABELS, PR_GROUP_ORDER } from './workspace-pr-status-groups'
 import type { FilterState, Section, Worktree } from './workspace-list-types'
-import type { MobileGroupMode, MobileSortMode } from './workspace-view-settings'
+import {
+  isMobileRepoGrouping,
+  type MobileGroupMode,
+  type MobileSortMode
+} from './workspace-view-settings'
 import { sortWorktrees } from './workspace-list-ordering'
 
 export type { FilterState, Section, Worktree } from './workspace-list-types'
@@ -132,7 +136,7 @@ export function buildSections(
     if (canonicalGroupWorktrees.length > 0) {
       sections.push(makeSection('all', 'All', canonicalGroupWorktrees, undefined, collapsedGroups))
     }
-  } else if (groupMode === 'repo') {
+  } else if (isMobileRepoGrouping(groupMode)) {
     const byRepo = new Map<string, Worktree[]>()
     for (const w of canonicalGroupWorktrees) {
       const key = w.repo || 'Unknown'

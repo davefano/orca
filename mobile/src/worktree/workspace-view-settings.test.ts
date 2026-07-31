@@ -21,13 +21,14 @@ const base: MobileViewState = {
 
 describe('group mode mapping', () => {
   it('round-trips every mobile group mode through the desktop value', () => {
-    for (const mode of ['none', 'workspaceStatus', 'repo', 'prStatus'] as const) {
+    for (const mode of ['none', 'workspaceStatus', 'repo', 'repository', 'prStatus'] as const) {
       expect(groupModeFromDesktop(groupModeToDesktop(mode))).toBe(mode)
     }
   })
 
   it('maps the desktop kebab-case values back to mobile', () => {
     expect(groupModeFromDesktop('workspace-status')).toBe('workspaceStatus')
+    expect(groupModeFromDesktop('repository')).toBe('repository')
     expect(groupModeFromDesktop('pr-status')).toBe('prStatus')
     expect(groupModeFromDesktop(undefined)).toBeNull()
   })
@@ -55,6 +56,13 @@ describe('applyDesktopViewSettings', () => {
       hideSleeping: true,
       filterRepoIds: ['repo-1']
     })
+  })
+
+  it('preserves desktop Repository grouping when mobile hydrates and writes settings', () => {
+    const next = applyDesktopViewSettings(base, { groupBy: 'repository' })
+
+    expect(next.groupMode).toBe('repository')
+    expect(groupModeToDesktop(next.groupMode)).toBe('repository')
   })
 
   it('keeps current values when the desktop payload is empty', () => {
