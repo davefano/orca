@@ -67,8 +67,28 @@
       ]
     },
     {
-      "id": "ssh-pty-health-read-only",
+      "id": "paired-runtime-ssh-image-paste",
       "order": 30,
+      "disposition": "required",
+      "reason": "Air Raid must route clipboard images through Ultra Magnus while preserving the fleet SSH host as the final file destination.",
+      "upstream": { "kind": "internal", "reference": null, "status": "teal-only" },
+      "sourceCommits": [
+        {
+          "sha": "e43c8e427",
+          "subject": "fix(clipboard): route paired SSH image pastes through runtime"
+        }
+      ],
+      "requiredPaths": [
+        "src/main/window/clipboard-runtime-image-upload.ts",
+        "src/main/window/clipboard-runtime-image-upload.test.ts"
+      ],
+      "verification": [
+        "pnpm vitest run --config config/vitest.config.ts src/main/window/clipboard-ipc-handlers.test.ts src/main/window/clipboard-runtime-image-upload.test.ts src/main/runtime/rpc/methods/clipboard.test.ts"
+      ]
+    },
+    {
+      "id": "ssh-pty-health-read-only",
+      "order": 40,
       "disposition": "required",
       "reason": "Fleet hosts need authoritative PTY pressure visibility before terminal allocation fails; mutation is deliberately excluded.",
       "upstream": {
@@ -86,7 +106,7 @@
     },
     {
       "id": "orcateal-packaging",
-      "order": 40,
+      "order": 50,
       "disposition": "required-packaging-branch",
       "reason": "The daily internal build needs an isolated name, bundle ID, profile, updater policy, and build identity.",
       "upstream": { "kind": "internal", "reference": null, "status": "teal-only" },
