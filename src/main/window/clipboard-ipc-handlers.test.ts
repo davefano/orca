@@ -648,7 +648,7 @@ describe('registerClipboardHandlers', () => {
     }
   })
 
-  it('saves clipboard images through the selected remote runtime host', async () => {
+  it('routes paired-client SSH image pastes through the owning runtime', async () => {
     const png = Buffer.alloc(512 * 1024)
     const contentBase64 = png.toString('base64')
     clipboardReadImageMock.mockReturnValue({
@@ -682,7 +682,8 @@ describe('registerClipboardHandlers', () => {
     const handlers = getRegisteredHandlers()
     await expect(
       handlers.get('clipboard:saveImageAsTempFile')?.(makeClipboardEvent(), {
-        runtimeEnvironmentId: 'remote-host-1'
+        runtimeEnvironmentId: 'remote-host-1',
+        connectionId: 'ssh-optimus'
       })
     ).resolves.toBe('/tmp/orca-paste-remote.png')
     expect(callRuntimeEnvironmentMock).toHaveBeenNthCalledWith(
@@ -690,7 +691,7 @@ describe('registerClipboardHandlers', () => {
       '/tmp',
       'remote-host-1',
       'clipboard.startImageUpload',
-      { expectedBase64Length: contentBase64.length, connectionId: null },
+      { expectedBase64Length: contentBase64.length, connectionId: 'ssh-optimus' },
       30_000
     )
     expect(callRuntimeEnvironmentMock).toHaveBeenNthCalledWith(
