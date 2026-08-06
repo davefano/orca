@@ -8,13 +8,23 @@ const {
   removeHandlerMock,
   isTrustedUIRendererMock,
   getLinuxPackageInstallInstructionsMock,
-  showLinuxPackageMock
+  showLinuxPackageMock,
+  checkForUpdatesFromMenuMock,
+  downloadUpdateMock,
+  quitAndInstallMock,
+  isLocalBuildUpdateActiveMock,
+  listAvailableReleaseBuildsMock
 } = vi.hoisted(() => ({
   handleMock: vi.fn(),
   removeHandlerMock: vi.fn(),
   isTrustedUIRendererMock: vi.fn<(sender: unknown) => boolean>(() => true),
   getLinuxPackageInstallInstructionsMock: vi.fn(),
-  showLinuxPackageMock: vi.fn()
+  showLinuxPackageMock: vi.fn(),
+  checkForUpdatesFromMenuMock: vi.fn(),
+  downloadUpdateMock: vi.fn(),
+  quitAndInstallMock: vi.fn(),
+  isLocalBuildUpdateActiveMock: vi.fn(() => false),
+  listAvailableReleaseBuildsMock: vi.fn()
 }))
 
 vi.mock('electron', () => ({
@@ -48,10 +58,12 @@ vi.mock('../macos-tcc-prompt-notice', () => ({
 
 vi.mock('../updater', () => ({
   checkForUpdates: vi.fn(),
-  checkForUpdatesFromMenu: vi.fn(),
-  downloadUpdate: vi.fn(),
+  checkForUpdatesFromMenu: checkForUpdatesFromMenuMock,
+  downloadUpdate: downloadUpdateMock,
   getUpdateStatus: vi.fn(),
-  quitAndInstall: vi.fn(),
+  quitAndInstall: quitAndInstallMock,
+  isLocalBuildUpdateActive: isLocalBuildUpdateActiveMock,
+  listAvailableReleaseBuilds: listAvailableReleaseBuildsMock,
   dismissNudge: vi.fn(),
   dismissAvailableUpdate: vi.fn(),
   setupAutoUpdater: vi.fn(),
@@ -130,7 +142,36 @@ describe('updater linux package recovery IPC handlers', () => {
       .mockReset()
       .mockResolvedValue({ ok: true, command: "sudo apt install -- '<pkg>'", packageFileName: 'p' })
     showLinuxPackageMock.mockReset().mockResolvedValue(undefined)
+    checkForUpdatesFromMenuMock.mockReset()
+    downloadUpdateMock.mockReset()
+    quitAndInstallMock.mockReset()
+    isLocalBuildUpdateActiveMock.mockReset().mockReturnValue(false)
+    listAvailableReleaseBuildsMock.mockReset()
     registerUpdaterHandlers({} as Store)
+  })
+
+  it('blocks official update IPC while preserving local build installation', async () => {
+    await getHandler('updater:check')({} as IpcMainInvokeEvent, {})
+    expect(checkForUpdatesFromMenuMock).not.toHaveBeenCalled()
+
+    await getHandler('updater:check')({} as IpcMainInvokeEvent, { localBuild: true })
+    expect(checkForUpdatesFromMenuMock).toHaveBeenCalledWith({ localBuild: true })
+
+    getHandler('updater:download')({} as IpcMainInvokeEvent)
+    getHandler('updater:quitAndInstall')({} as IpcMainInvokeEvent)
+    expect(downloadUpdateMock).not.toHaveBeenCalled()
+    expect(quitAndInstallMock).not.toHaveBeenCalled()
+
+    isLocalBuildUpdateActiveMock.mockReturnValue(true)
+    getHandler('updater:download')({} as IpcMainInvokeEvent)
+    getHandler('updater:quitAndInstall')({} as IpcMainInvokeEvent)
+    expect(downloadUpdateMock).toHaveBeenCalledOnce()
+    expect(quitAndInstallMock).toHaveBeenCalledOnce()
+
+    await expect(
+      getHandler('updater:listBuilds')({} as IpcMainInvokeEvent, 'stable')
+    ).resolves.toMatchObject({ ok: false, message: expect.stringContaining('disabled') })
+    expect(listAvailableReleaseBuildsMock).not.toHaveBeenCalled()
   })
 
   afterEach(() => {

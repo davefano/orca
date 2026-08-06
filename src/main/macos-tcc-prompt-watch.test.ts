@@ -56,7 +56,9 @@ describe('isOrcaAttributedPrompt', () => {
       'com.stablyai.orca.dev',
       'com.stablyai.orca.dev.helper',
       'com.stablyai.orca.local',
-      'com.stablyai.orca.local.helper'
+      'com.stablyai.orca.local.helper',
+      'com.teal.orcateal',
+      'com.teal.orcateal.helper'
     ]) {
       expect(
         isOrcaAttributedPrompt({

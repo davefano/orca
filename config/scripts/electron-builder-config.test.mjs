@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 
 const require = createRequire(import.meta.url)
 const electronBuilderConfig = require('../electron-builder.config.cjs')
+const compatibilityContract = require('../../src/shared/local-build-compatibility-contract.json')
 const { FileMatcher } = require('app-builder-lib/out/fileMatcher')
 const electronBuilderNativeRebuild = require('./electron-builder-native-rebuild.cjs')
 const {
@@ -303,14 +304,12 @@ describe('electron-builder config', () => {
     }
   })
 
-  // Why: Squirrel.Mac swaps the .app in place only when the replacement carries the
-  // same bundle id and a valid Developer ID signature. A hourly built on the local
-  // (com.stablyai.orca.local, ad-hoc) identity would be un-installable over a real
-  // Orca — the whole point of the channel.
-  it('builds hourly artifacts with the release signing identity', () => {
+  // Why: every OrcaTeal package variant must retain the isolated bundle identity;
+  // otherwise a dev-channel build can overwrite official Orca or lose Teal's TCC grants.
+  it('builds hourly artifacts with the OrcaTeal signing identity', () => {
     withHourlyEnv((config) => {
       expect(config.mac.appId).toBeUndefined()
-      expect(config.appId).toBe('com.stablyai.orca')
+      expect(config.appId).toBe(compatibilityContract.appId)
       expect(config.mac.hardenedRuntime).toBe(true)
       expect(config.forceCodeSigning).toBe(true)
     })
@@ -352,12 +351,11 @@ describe('electron-builder config', () => {
     )
   })
 
-  // Why adhoc carries the identical mac identity to hourly: it installs over a
-  // real Orca through the same updater path, so the same signing and the same TCC
-  // argument apply. Only the destination repo differs.
-  it('builds adhoc artifacts with the release identity and its own repo', () => {
+  // Why adhoc carries the same isolated identity as hourly: signing and TCC grants
+  // must remain stable across internal OrcaTeal artifacts.
+  it('builds adhoc artifacts with the OrcaTeal identity and its own repo', () => {
     withAdhocEnv((config) => {
-      expect(config.appId).toBe('com.stablyai.orca')
+      expect(config.appId).toBe(compatibilityContract.appId)
       expect(config.mac.hardenedRuntime).toBe(true)
       expect(config.mac.notarize).toBe(true)
       expect(config.forceCodeSigning).toBe(true)

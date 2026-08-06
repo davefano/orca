@@ -1,6 +1,7 @@
 import { spawn, type ChildProcessByStdio } from 'node:child_process'
 import { createInterface, type Interface } from 'node:readline'
 import type { Readable } from 'node:stream'
+import { LOCAL_BUILD_COMPATIBILITY_CONTRACT } from '../shared/local-build-compatibility-contract'
 
 /** Why: stdin is 'ignore', so this is narrower than ChildProcessWithoutNullStreams. */
 export type LogStreamChild = ChildProcessByStdio<null, Readable, Readable>
@@ -24,7 +25,9 @@ const ORCA_RESPONSIBLE_IDENTIFIERS = new Set([
   'com.stablyai.orca.dev',
   'com.stablyai.orca.dev.helper',
   'com.stablyai.orca.local',
-  'com.stablyai.orca.local.helper'
+  'com.stablyai.orca.local.helper',
+  LOCAL_BUILD_COMPATIBILITY_CONTRACT.appId,
+  `${LOCAL_BUILD_COMPATIBILITY_CONTRACT.appId}.helper`
 ])
 
 /** Why: the prompt classes #9756 is about — other-apps' data plus the protected home folders agents sweep. */
