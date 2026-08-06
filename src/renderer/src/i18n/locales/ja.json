@@ -4371,7 +4371,7 @@
           "automation": "自動化",
           "folderPathIdentity": "ブランチ / フォルダパス",
           "cli": "Orca CLI",
-          "repository": "Repository",
+          "repository": "Repo",
           "host": "Host"
         },
         "SshTargetRow": {

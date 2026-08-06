@@ -4390,7 +4390,7 @@
           "219ebf1961": "Nombre de rama",
           "folderPathIdentity": "Rama / ruta de carpeta",
           "cli": "Orca CLI",
-          "repository": "Repository",
+          "repository": "Repo",
           "host": "Host"
         },
         "SshTargetRow": {

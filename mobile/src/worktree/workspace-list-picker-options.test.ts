@@ -22,11 +22,11 @@ describe('WORKSPACE_SORT_OPTIONS', () => {
 })
 
 describe('WORKSPACE_GROUP_OPTIONS', () => {
-  it('keeps Project and Repository as distinct persisted grouping modes', () => {
+  it('keeps Project and Repo as distinct persisted grouping modes', () => {
     expect(WORKSPACE_GROUP_OPTIONS).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ value: 'repo', label: 'Project' }),
-        expect.objectContaining({ value: 'repository', label: 'Repository' })
+        expect.objectContaining({ value: 'repository', label: 'Repo' })
       ])
     )
   })

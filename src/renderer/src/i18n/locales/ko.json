@@ -4371,7 +4371,7 @@
           "automation": "자동화",
           "folderPathIdentity": "브랜치 / 폴더 경로",
           "cli": "Orca CLI",
-          "repository": "Repository",
+          "repository": "Repo",
           "host": "Host"
         },
         "SshTargetRow": {

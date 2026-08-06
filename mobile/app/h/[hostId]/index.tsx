@@ -937,7 +937,7 @@ export function HostScreen({
                       : groupMode === 'repo'
                         ? 'Project'
                         : groupMode === 'repository'
-                          ? 'Repository'
+                          ? 'Repo'
                           : 'PR'}
                 </Text>
               </Pressable>
@@ -1061,7 +1061,7 @@ export function HostScreen({
                     : groupMode === 'repo'
                       ? 'Project'
                       : groupMode === 'repository'
-                        ? 'Repository'
+                        ? 'Repo'
                         : 'PR'}
               </Text>
             </Pressable>

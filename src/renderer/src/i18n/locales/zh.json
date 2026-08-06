@@ -4383,7 +4383,7 @@
           "automation": "自动化",
           "folderPathIdentity": "分支 / 文件夹路径",
           "cli": "Orca CLI",
-          "repository": "Repository",
+          "repository": "Repo",
           "host": "Host"
         },
         "SshTargetRow": {
