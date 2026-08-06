@@ -1552,17 +1552,18 @@ export function ResourceUsageStatusSegment({
             {floatingPosition && (
               <Tooltip delayDuration={200}>
                 <TooltipTrigger asChild>
-                  <button
-                    type="button"
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
                     onClick={resetFloatingPosition}
                     aria-label={translate(
                       'auto.components.status.bar.ResourceUsageStatusSegment.b2f6b4c0b4',
                       'Reset Resource Manager position'
                     )}
-                    className="inline-flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    className="text-muted-foreground hover:text-foreground"
                   >
                     <Undo2 className="size-3" />
-                  </button>
+                  </Button>
                 </TooltipTrigger>
                 <TooltipContent side="top" sideOffset={6}>
                   {translate(
@@ -1618,17 +1619,18 @@ export function ResourceUsageStatusSegment({
             </Tooltip>
             <Tooltip delayDuration={200}>
               <TooltipTrigger asChild>
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
                   onClick={() => setResourceManagerOpen(false)}
                   aria-label={translate(
                     'auto.components.status.bar.ResourceUsageStatusSegment.17a6a2c4f3',
                     'Close Resource Manager'
                   )}
-                  className="inline-flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  className="text-muted-foreground hover:text-foreground"
                 >
                   <X className="size-3" />
-                </button>
+                </Button>
               </TooltipTrigger>
               <TooltipContent side="top" sideOffset={6}>
                 {translate(
@@ -1752,18 +1754,19 @@ export function ResourceUsageStatusSegment({
                   'SSH PTY health'
                 )}
               </span>
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="icon-xs"
                 onClick={() => void refreshSshPtyHealth()}
                 disabled={sshPtyHealthLoading}
-                className="rounded p-0.5 transition-colors hover:bg-accent disabled:opacity-40"
+                className="size-5 text-muted-foreground"
                 aria-label={translate(
                   'auto.components.status.bar.ResourceUsageStatusSegment.refreshSshPtyHealth',
                   'Refresh SSH PTY health'
                 )}
               >
                 <RotateCw className={cn('size-3', sshPtyHealthLoading && 'animate-spin')} />
-              </button>
+              </Button>
             </div>
             <div className="space-y-1">
               {sshPtyHealth.map((result) => {
