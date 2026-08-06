@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest'
 import {
   classifyCherryOutput,
   subjectsAppearInOrder,
-  validateManifest
+  validateManifest,
+  validateWatchStatus
 } from './verify-teal-patch-stack.mjs'
 
 describe('Teal patch stack verification', () => {
@@ -47,5 +48,15 @@ describe('Teal patch stack verification', () => {
     expect(errors).toContain('duplicate patch or watch id: same')
     expect(errors).toContain('upstream watch item same has an invalid commit')
     expect(errors).toContain('upstream watch item missing-commits requires commits')
+  })
+
+  it('requires watch statuses to match stable-base inclusion', () => {
+    expect(validateWatchStatus('await-next-stable', [{ includedInBase: true }])).toContain(
+      'update the watch status'
+    )
+    expect(validateWatchStatus('landed-in-stable', [{ includedInBase: false }])).toContain(
+      'absent from the stable base'
+    )
+    expect(validateWatchStatus('landed-in-stable', [{ includedInBase: true }])).toBeNull()
   })
 })
