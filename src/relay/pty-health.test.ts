@@ -1,11 +1,27 @@
 import { describe, expect, it } from 'vitest'
-import { classifyPtyPressure, parseDarwinAllocatedPtys, parsePositiveInteger } from './pty-health'
+import {
+  classifyPtyPressure,
+  parseDarwinAllocatedPtyMasters,
+  parsePositiveInteger
+} from './pty-health'
 
 describe('PTY health parsing', () => {
-  it('counts unique live Darwin PTY slave paths rather than device nodes', () => {
+  it('counts allocated Darwin PTY master descriptors', () => {
     expect(
-      parseDarwinAllocatedPtys(['??', 'ttys001', 'ttys001', 'ttys00a', 'console'].join('\n'))
-    ).toBe(2)
+      parseDarwinAllocatedPtyMasters(
+        ['p20873', 'f19', 'n/dev/ptmx', 'f20', 'n/dev/ptmx', 'p31051', 'f11', 'n/dev/ptmx'].join(
+          '\n'
+        )
+      )
+    ).toBe(3)
+  })
+
+  it('includes master-only allocations after their slave processes exit', () => {
+    const leakedMasters = Array.from({ length: 480 }, (_, index) => [
+      `f${index + 10}`,
+      'n/dev/ptmx'
+    ]).flat()
+    expect(parseDarwinAllocatedPtyMasters(['p20873', ...leakedMasters].join('\n'))).toBe(480)
   })
 
   it('rejects invalid system capacities', () => {
