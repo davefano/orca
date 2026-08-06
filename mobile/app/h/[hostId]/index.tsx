@@ -733,6 +733,10 @@ export function HostScreen({
   }, [filters])
   const selectedSortLabel =
     SORT_OPTIONS.find((option) => option.value === sortMode)?.label ?? 'Recent'
+  const selectedGroupLabel =
+    groupMode === 'none'
+      ? 'Group'
+      : (GROUP_OPTIONS.find((option) => option.value === groupMode)?.label ?? 'Group')
 
   const handleGroupChange = useCallback(
     (value: MobileGroupMode) => {
@@ -930,15 +934,7 @@ export function HostScreen({
               >
                 <Layers size={14} color={colors.textSecondary} />
                 <Text style={styles.sortLabel} numberOfLines={1}>
-                  {groupMode === 'none'
-                    ? 'Group'
-                    : groupMode === 'workspaceStatus'
-                      ? 'Status'
-                      : groupMode === 'repo'
-                        ? 'Project'
-                        : groupMode === 'repository'
-                          ? 'Repo'
-                          : 'PR'}
+                  {selectedGroupLabel}
                 </Text>
               </Pressable>
             </View>
@@ -1054,15 +1050,7 @@ export function HostScreen({
             <Pressable style={styles.modeButton} onPress={() => setShowGroupPicker(true)}>
               <Layers size={14} color={colors.textSecondary} />
               <Text style={styles.sortLabel} numberOfLines={1}>
-                {groupMode === 'none'
-                  ? 'Group'
-                  : groupMode === 'workspaceStatus'
-                    ? 'Status'
-                    : groupMode === 'repo'
-                      ? 'Project'
-                      : groupMode === 'repository'
-                        ? 'Repo'
-                        : 'PR'}
+                {selectedGroupLabel}
               </Text>
             </Pressable>
 
