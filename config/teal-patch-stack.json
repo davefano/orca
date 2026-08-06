@@ -121,9 +121,18 @@
         { "sha": "657753765", "subject": "refactor(teal): centralize build and drag state" },
         { "sha": "9f0f8f1d5", "subject": "test(packaging): reuse OrcaTeal app identity" }
       ],
-      "requiredPaths": ["src/shared/local-build-compatibility-contract.json"],
+      "requiredPaths": [
+        "config/scripts/electron-builder-config.test.mjs",
+        "config/scripts/mac-build-compatibility.test.mjs",
+        "src/main/local-builds/local-build-candidate.test.ts",
+        "src/main/startup/configure-process.test.ts",
+        "src/main/startup/dev-instance-identity.test.ts",
+        "src/main/window/attach-main-window-services.test.ts",
+        "src/shared/local-build-compatibility-contract.json",
+        "src/shared/local-build-compatibility.test.ts"
+      ],
       "verification": [
-        "pnpm vitest run --config config/vitest.config.ts config/app-identity.test.ts"
+        "pnpm vitest run --config config/vitest.config.ts config/scripts/electron-builder-config.test.mjs config/scripts/mac-build-compatibility.test.mjs src/main/local-builds/local-build-candidate.test.ts src/main/startup/configure-process.test.ts src/main/startup/dev-instance-identity.test.ts src/main/window/attach-main-window-services.test.ts src/shared/local-build-compatibility.test.ts"
       ]
     }
   ],
