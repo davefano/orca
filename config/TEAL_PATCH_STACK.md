@@ -57,6 +57,6 @@ branches.
   subsystem now.
 - Client workspace isolation is excluded until a focused Air/Ultra reproduction
   proves stable upstream still needs it.
-- Paired-terminal recovery PRs #11005, #11416, and #11513 remain on the
-  upstream watchlist for `v1.4.162`. Their subsystem-sized dependency chain is
-  intentionally not cherry-picked into the daily stable build.
+- Paired-terminal recovery PRs #11005, #11416, and #11513 are included in
+  `v1.4.173`. Keep their watch item until the packaged Air -> Ultra -> fleet
+  reconnect and restart smoke passes; do not carry a Teal replacement patch.

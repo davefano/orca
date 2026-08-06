@@ -95,6 +95,17 @@ export function classifyCherryOutput(output) {
   return 'unknown'
 }
 
+export function validateWatchStatus(status, commits) {
+  const allIncluded = commits.every((commit) => commit.includedInBase)
+  if (status === 'await-next-stable' && allIncluded) {
+    return 'all watched commits are in the stable base; update the watch status'
+  }
+  if (status?.startsWith('landed-in-stable') && !allIncluded) {
+    return 'watch is marked landed, but one or more commits are absent from the stable base'
+  }
+  return null
+}
+
 function audit({ manifestPath = DEFAULT_MANIFEST, baseOverride, strict = false } = {}) {
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
   const validationErrors = validateManifest(manifest)
@@ -175,6 +186,10 @@ function audit({ manifestPath = DEFAULT_MANIFEST, baseOverride, strict = false }
     })
     if (strict && commits.some((commit) => commit.patchStatus === 'unavailable')) {
       failures.push(`upstream watch item ${item.id} could not be audited; fetch donor commits`)
+    }
+    const statusError = validateWatchStatus(item.status, commits)
+    if (strict && statusError) {
+      failures.push(`upstream watch item ${item.id}: ${statusError}`)
     }
     upstreamWatchlist.push({ id: item.id, status: item.status, commits })
   }

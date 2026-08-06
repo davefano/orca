@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "base": {
     "channel": "stable",
-    "tag": "v1.4.162",
-    "commit": "e058429e1"
+    "tag": "v1.4.173",
+    "commit": "fcc009ce0"
   },
   "policy": {
     "description": "Keep OrcaTeal on upstream stable releases and carry only workflow-critical Teal patches that are not upstream.",
@@ -55,6 +55,10 @@
         {
           "sha": "b16b3c4c6",
           "subject": "fix(sidebar): preserve SSH hosts across grouping modes"
+        },
+        {
+          "sha": "528f3ba63",
+          "subject": "fix(sidebar): label repository grouping as Repo"
         }
       ],
       "requiredPaths": [
@@ -126,7 +130,7 @@
   "upstreamWatchlist": [
     {
       "id": "paired-terminal-recovery",
-      "status": "await-next-stable",
+      "status": "landed-in-stable-awaiting-fleet-smoke",
       "reason": "Air Raid depends on Ultra-hosted SSH terminals surviving parking, reconnect, and shared-control refresh without stale providers or duplicate panes.",
       "commits": [
         {
@@ -145,11 +149,11 @@
           "role": "workflow-fix"
         }
       ],
-      "decision": "Do not transplant this dependency-heavy subsystem onto v1.4.162. Keep SSH providers eagerly reconnectable operationally, then remove this watch item only after all commits land in a stable base and the Air -> Ultra -> fleet restart smoke passes."
+      "decision": "All commits are ancestors of v1.4.173, so Teal carries no replacement patch. Retain this watch item until the Air -> Ultra -> fleet reconnect and restart smoke passes on the packaged build."
     },
     {
       "id": "runtime-reconnect-isolation",
-      "status": "already-equivalent",
+      "status": "landed-in-stable",
       "reason": "Runtime reconnect refreshes must not globally serialize or freeze the sidebar.",
       "commits": [
         {
@@ -158,7 +162,7 @@
           "role": "workflow-fix"
         }
       ],
-      "decision": "The Teal stack is patch-id equivalent today. Re-check equivalence on every stable rebase and drop the local equivalent once the stable base contains it."
+      "decision": "v1.4.173 contains the upstream fix directly. Teal carries no local reconnect-isolation patch."
     }
   ],
   "excluded": [
