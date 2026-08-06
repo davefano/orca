@@ -52,11 +52,11 @@ describe('SidebarGroupByToggle', () => {
     expect(setGroupBy).toHaveBeenCalledWith('none')
   })
 
-  it('offers canonical repository grouping separately from project grouping', async () => {
+  it('offers Repo grouping separately from Project grouping', async () => {
     const setGroupBy = vi.fn()
     const container = await renderGroupByToggle({ groupBy: 'repo', setGroupBy })
     const repositoryButton = [...container.querySelectorAll('button')].find(
-      (button) => button.textContent === 'Repository'
+      (button) => button.textContent === 'Repo'
     )
 
     await act(async () => {
