@@ -1566,6 +1566,10 @@ export function checkForUpdates(): void {
   })
 }
 
+export function isLocalBuildUpdateActive(): boolean {
+  return activeUpdateSource === 'local'
+}
+
 function enablePrereleaseManifestChecks(): void {
   getAutoUpdater().allowPrerelease = true
 }
@@ -2148,6 +2152,7 @@ export function setupAutoUpdater(
     setDismissedUpdateNudgeId?: (id: string | null) => void
     getReleaseChannelOverride?: () => ReleaseChannel | null
     installMode?: UpdateInstallMode
+    releaseUpdatesEnabled?: boolean
   }
 ): void {
   mainWindowRef = mainWindow
@@ -2199,7 +2204,7 @@ export function setupAutoUpdater(
   // Security: never re-add a verifyUpdateCodeSignature override — a no-op disables electron-updater's built-in Authenticode check and accepts any installer.
 
   // Why: generic provider avoids the native GitHub provider's RC-channel filtering; per-check repinning to a concrete /releases/download/<tag>/ URL avoids /latest redirect drift between check and download.
-  if (activeUpdateSource === 'release') {
+  if (activeUpdateSource === 'release' && opts?.releaseUpdatesEnabled !== false) {
     autoUpdater.setFeedURL({
       provider: 'generic',
       url: 'https://github.com/stablyai/orca/releases/latest/download'
@@ -2256,6 +2261,10 @@ export function setupAutoUpdater(
       userInitiatedCheck = value
     }
   })
+
+  if (opts?.releaseUpdatesEnabled === false) {
+    return
+  }
 
   void checkForUpdateNudge()
   scheduleUpdateNudgeCheck()

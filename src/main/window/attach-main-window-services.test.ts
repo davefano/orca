@@ -49,7 +49,8 @@ const {
 
 vi.mock('electron', () => ({
   app: {
-    getPath: vi.fn(() => '/tmp/orca-test-user-data')
+    getPath: vi.fn(() => '/tmp/orca-test-user-data'),
+    getVersion: vi.fn(() => '1.4.173')
   },
   clipboard: {},
   systemPreferences: {
@@ -291,7 +292,7 @@ describe('attachMainWindowServices', () => {
     expect(hydrateLocalPtyRegistryAtBootMock).toHaveBeenLastCalledWith(store)
   })
 
-  it('never configures the official updater for OrcaTeal', async () => {
+  it('configures only local-build installation for OrcaTeal', async () => {
     const onBeforeUpdateQuit = vi.fn()
     const store = createStore()
     const mainWindow = createMainWindow()
@@ -307,12 +308,15 @@ describe('attachMainWindowServices', () => {
 
     expect(setupAutoUpdaterMock).not.toHaveBeenCalled()
     await fireReadyToShow(mainWindow)
-    expect(setupAutoUpdaterMock).not.toHaveBeenCalled()
+    expect(setupAutoUpdaterMock).toHaveBeenCalledWith(
+      mainWindow,
+      expect.objectContaining({ releaseUpdatesEnabled: false })
+    )
     expect(onBeforeUpdateQuit).not.toHaveBeenCalled()
     expect(store.flushPendingAsync).not.toHaveBeenCalled()
   })
 
-  it('does not install updater quit hooks when cleanup is omitted', async () => {
+  it('keeps local-build updater setup safe when cleanup is omitted', async () => {
     const store = createStore()
     const mainWindow = createMainWindow()
 
@@ -320,7 +324,10 @@ describe('attachMainWindowServices', () => {
 
     await fireReadyToShow(mainWindow)
 
-    expect(setupAutoUpdaterMock).not.toHaveBeenCalled()
+    expect(setupAutoUpdaterMock).toHaveBeenCalledWith(
+      mainWindow,
+      expect.objectContaining({ releaseUpdatesEnabled: false })
+    )
     expect(store.flushPendingAsync).not.toHaveBeenCalled()
   })
 

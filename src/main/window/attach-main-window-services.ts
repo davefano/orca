@@ -37,6 +37,7 @@ import {
   downloadUpdate,
   getLinuxPackageInstallInstructions,
   getUpdateStatus,
+  isLocalBuildUpdateActive,
   quitAndInstall,
   setupAutoUpdater,
   showLinuxPackage,
@@ -161,10 +162,6 @@ export function attachMainWindowServices(
       return
     }
     updaterSetupDone = true
-    if (!ENABLE_AUTO_UPDATER) {
-      logStartupMilestone('updater-disabled-custom-distribution')
-      return
-    }
     setupAutoUpdater(mainWindow, {
       getLastUpdateCheckAt: () => store.getUI().lastUpdateCheckAt,
       onBeforeQuit: async () => {
@@ -191,9 +188,12 @@ export function attachMainWindowServices(
         store.updateUI({ dismissedUpdateNudgeId: id })
       },
       getReleaseChannelOverride: () => store.getUI().releaseChannelOverride ?? null,
-      installMode: options?.updateInstallMode
+      installMode: options?.updateInstallMode,
+      releaseUpdatesEnabled: ENABLE_AUTO_UPDATER
     })
-    logStartupMilestone('updater-setup-done')
+    logStartupMilestone(
+      ENABLE_AUTO_UPDATER ? 'updater-setup-done' : 'updater-disabled-custom-distribution'
+    )
   }
   pendingAutoUpdaterSetup = setupAutoUpdaterDeferred
   mainWindow.once('ready-to-show', () => setImmediate(setupAutoUpdaterDeferred))
@@ -549,11 +549,24 @@ export function registerUpdaterHandlers(_store: Store): void {
   ipcMain.handle('updater:getStatus', () => getUpdateStatus())
   ipcMain.handle('updater:getVersion', () => app.getVersion())
   ipcMain.handle('updater:check', (_event, options?: UpdateCheckOptions) => {
+    if (!ENABLE_AUTO_UPDATER && !options?.localBuild) {
+      return
+    }
     ensureAutoUpdaterConfigured()
     return checkForUpdatesFromMenu(options)
   })
-  ipcMain.handle('updater:download', () => downloadUpdate())
-  ipcMain.handle('updater:quitAndInstall', () => quitAndInstall())
+  ipcMain.handle('updater:download', () => {
+    if (!ENABLE_AUTO_UPDATER && !isLocalBuildUpdateActive()) {
+      return
+    }
+    return downloadUpdate()
+  })
+  ipcMain.handle('updater:quitAndInstall', () => {
+    if (!ENABLE_AUTO_UPDATER && !isLocalBuildUpdateActive()) {
+      return
+    }
+    return quitAndInstall()
+  })
   ipcMain.handle('updater:dismissNudge', () => dismissNudge())
   ipcMain.handle('updater:dismissAvailableUpdate', () => dismissAvailableUpdate())
   // Why: the response carries a local package path and the reveal touches the native desktop, so
@@ -569,6 +582,13 @@ export function registerUpdaterHandlers(_store: Store): void {
   ipcMain.handle(
     'updater:listBuilds',
     async (_event, channel: ReleaseChannel): Promise<ReleaseBuildListResult> => {
+      if (!ENABLE_AUTO_UPDATER) {
+        return {
+          ok: false,
+          channel,
+          message: 'Official Orca updates are disabled for this custom distribution.'
+        }
+      }
       if (!RELEASE_CHANNELS.includes(channel)) {
         return { ok: false, channel, message: `Unknown release channel "${channel}".` }
       }

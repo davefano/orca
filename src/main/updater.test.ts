@@ -299,6 +299,18 @@ describe('updater', () => {
     expect(powerMonitorOnMock).not.toHaveBeenCalled()
   })
 
+  it('initializes local build support without contacting the official release feed', async () => {
+    const mainWindow = { webContents: { send: vi.fn() } }
+    const { setupAutoUpdater } = await import('./updater')
+
+    setupAutoUpdater(mainWindow as never, { releaseUpdatesEnabled: false })
+
+    expect(autoUpdaterMock.setFeedURL).not.toHaveBeenCalled()
+    expect(autoUpdaterMock.checkForUpdates).not.toHaveBeenCalled()
+    expect(fetchNudgeMock).not.toHaveBeenCalled()
+    expect(powerMonitorOnMock).not.toHaveBeenCalled()
+  })
+
   it.each([
     ['hourly', 'v1.4.160-hourly.202607281400', 'Hourly builds are produced only for macOS.'],
     ['adhoc', 'v1.4.160-adhoc.20260728140533', 'Adhoc builds are produced only for macOS.']
