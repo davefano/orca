@@ -1088,6 +1088,7 @@ export function ResourceUsageStatusSegment({
 
   const refreshSshPtyHealth = useCallback(async () => {
     const refreshSequence = ++sshPtyHealthRefreshSequenceRef.current
+    setSshPtyHealth([])
     setSshPtyHealthLoading(true)
     try {
       const { targets } = await callRuntimeRpc<{ targets: { id: string }[] }>(
@@ -1115,12 +1116,22 @@ export function ResourceUsageStatusSegment({
       }
     } catch (error) {
       console.error('[resource-usage] SSH PTY health failed', error)
+      if (mountedRef.current && refreshSequence === sshPtyHealthRefreshSequenceRef.current) {
+        setSshPtyHealth([])
+      }
     } finally {
       if (mountedRef.current && refreshSequence === sshPtyHealthRefreshSequenceRef.current) {
         setSshPtyHealthLoading(false)
       }
     }
   }, [mountedRef, ptyHealthRuntimeTarget])
+  useEffect(() => {
+    // Why: a failed refresh for a newly selected runtime must never leave the previous
+    // runtime's hosts presented as current.
+    sshPtyHealthRefreshSequenceRef.current += 1
+    setSshPtyHealth([])
+    setSshPtyHealthLoading(false)
+  }, [ptyHealthRuntimeTarget])
   const daemonActions = useDaemonActions({
     onRestartSettled: () => {
       clearSessionsError()

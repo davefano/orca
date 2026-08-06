@@ -10,15 +10,21 @@ export function parsePositiveInteger(value: string): number | null {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null
 }
 
-export function parseDarwinAllocatedPtys(output: string): number {
-  const ttyNames = new Set<string>()
+export function parseDarwinAllocatedPtyMasters(output: string): number {
+  const masters = new Set<string>()
+  let processId: string | null = null
+  let fileDescriptor: string | null = null
   for (const line of output.split(/\r?\n/u)) {
-    const ttyName = line.trim()
-    if (ttyName.startsWith('ttys')) {
-      ttyNames.add(ttyName)
+    if (line.startsWith('p')) {
+      processId = line.slice(1)
+      fileDescriptor = null
+    } else if (line.startsWith('f')) {
+      fileDescriptor = line.slice(1)
+    } else if (line === 'n/dev/ptmx' && processId && fileDescriptor) {
+      masters.add(`${processId}:${fileDescriptor}`)
     }
   }
-  return ttyNames.size
+  return masters.size
 }
 
 export function classifyPtyPressure(
@@ -48,13 +54,13 @@ async function readDarwinCapacity(): Promise<number | null> {
 }
 
 async function readDarwinAllocated(): Promise<number> {
-  // Why: /dev/ttys* contains persistent device nodes, not live allocations.
-  // Unique process-backed TTY names reveal the active pool without requiring elevated lsof access.
-  const { stdout } = await execFile('/bin/ps', ['-axo', 'tty='], {
+  // Why: leaked relays can retain hundreds of PTY masters after every slave process exits.
+  // Counting /dev/ptmx file descriptors sees those allocations; process TTY names do not.
+  const { stdout } = await execFile('/usr/sbin/lsof', ['-n', '-F', 'pfn', '/dev/ptmx'], {
     timeout: DIAGNOSTIC_TIMEOUT_MS,
     maxBuffer: 4 * 1024 * 1024
   })
-  return parseDarwinAllocatedPtys(stdout)
+  return parseDarwinAllocatedPtyMasters(stdout)
 }
 
 export async function collectPtyHealth(args: {
