@@ -3,7 +3,7 @@
 // RPCs). Keeping these settings in the same global store is what lets a grouping
 // or filter change on the phone show up on desktop and vice-versa.
 
-import type { WorkspaceStatusDefinition } from '../../../src/shared/types'
+import type { PersistedUIState, WorkspaceStatusDefinition } from '../../../src/shared/types'
 import { coerceMobileWorkspaceStatuses } from './mobile-workspace-statuses'
 
 export type MobileGroupMode = 'none' | 'workspaceStatus' | 'repo' | 'repository' | 'prStatus'
@@ -11,16 +11,19 @@ export type MobileGroupMode = 'none' | 'workspaceStatus' | 'repo' | 'repository'
 export type MobileSortMode = 'smart' | 'name' | 'recent' | 'repo' | 'manual'
 
 // Desktop PersistedUIState fields this screen syncs (a structural subset).
-export type WorkspaceViewSettings = {
-  groupBy?: 'none' | 'workspace-status' | 'repo' | 'repository' | 'pr-status'
-  sortBy?: 'name' | 'smart' | 'recent' | 'repo' | 'manual'
-  hideSleepingWorkspaces?: boolean
-  hideDefaultBranchWorkspace?: boolean
-  alwaysShowDefaultBranchWorkspace?: boolean
-  filterRepoIds?: string[]
-  collapsedGroups?: string[]
-  workspaceStatuses?: WorkspaceStatusDefinition[]
-}
+export type WorkspaceViewSettings = Partial<
+  Pick<
+    PersistedUIState,
+    | 'groupBy'
+    | 'sortBy'
+    | 'hideSleepingWorkspaces'
+    | 'hideDefaultBranchWorkspace'
+    | 'alwaysShowDefaultBranchWorkspace'
+    | 'filterRepoIds'
+    | 'collapsedGroups'
+    | 'workspaceStatuses'
+  >
+>
 
 const GROUP_TO_DESKTOP: Record<MobileGroupMode, NonNullable<WorkspaceViewSettings['groupBy']>> = {
   none: 'none',

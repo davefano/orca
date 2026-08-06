@@ -274,7 +274,7 @@ function buildProjectGroupingIndex(model?: ProjectGroupingModel): ProjectGroupin
   return index
 }
 
-export type ProjectHeaderRevealTarget = {
+export type RepoSectionGroupingTarget = {
   key: string
   label: string
   repo?: Repo
@@ -285,7 +285,7 @@ function getProjectGroupingForRepo(
   repoId: string,
   repoMap: Map<string, Repo>,
   projectIndex: ProjectGroupingIndex | null
-): ProjectHeaderRevealTarget {
+): RepoSectionGroupingTarget {
   const repo = repoMap.get(repoId)
   const setup = projectIndex?.setupByRepoId.get(repoId)
   const project = setup ? projectIndex?.projectById.get(setup.projectId) : undefined
@@ -327,7 +327,7 @@ function getRepositoryLabel(identityKey: string): string {
 function getRepositoryGroupingForRepo(
   repoId: string,
   repoMap: Map<string, Repo>
-): ProjectHeaderRevealTarget {
+): RepoSectionGroupingTarget {
   const repo = repoMap.get(repoId)
   if (!repo) {
     return {
@@ -355,7 +355,7 @@ function getRepoSectionGroupingForRepo(
   repoId: string,
   repoMap: Map<string, Repo>,
   projectIndex: ProjectGroupingIndex | null
-): ProjectHeaderRevealTarget {
+): RepoSectionGroupingTarget {
   return groupBy === 'repository'
     ? getRepositoryGroupingForRepo(repoId, repoMap)
     : getProjectGroupingForRepo(repoId, repoMap, projectIndex)
@@ -365,7 +365,7 @@ export function getProjectHeaderRevealTarget(
   repoId: string,
   repoMap: Map<string, Repo>,
   projectGrouping?: ProjectGroupingModel
-): ProjectHeaderRevealTarget {
+): RepoSectionGroupingTarget {
   return getProjectGroupingForRepo(repoId, repoMap, buildProjectGroupingIndex(projectGrouping))
 }
 
@@ -1133,12 +1133,9 @@ export function buildRows(
     pinnedDisplayPolicy === 'duplicate-in-groups'
       ? worktrees
       : worktrees.filter((worktree) => !worktree.isPinned)
-  const worktreeHostContextLabels = getWorktreeHostContextLabels(
-    naturalWorktrees,
-    repoMap,
-    hostLabelById,
-    defaultHostId
-  )
+  const worktreeHostContextLabels = isRepoSectionGrouping(groupBy)
+    ? undefined
+    : getWorktreeHostContextLabels(naturalWorktrees, repoMap, hostLabelById, defaultHostId)
   const renderedNaturalAnchorRepoIds = getRenderedNaturalAnchorRepoIds({
     groupBy,
     worktrees: naturalWorktrees,
@@ -1187,12 +1184,25 @@ export function buildRows(
   }
 
   const grouped = new Map<string, WorktreeGroupEntry>()
+  const repoSectionGroupingByRepoId = new Map<string, RepoSectionGroupingTarget>()
+  const resolveRepoSectionGrouping = (
+    sectionGroupBy: Extract<WorktreeGroupBy, 'repo' | 'repository'>,
+    repoId: string
+  ): RepoSectionGroupingTarget => {
+    const cached = repoSectionGroupingByRepoId.get(repoId)
+    if (cached) {
+      return cached
+    }
+    const grouping = getRepoSectionGroupingForRepo(sectionGroupBy, repoId, repoMap, projectIndex)
+    repoSectionGroupingByRepoId.set(repoId, grouping)
+    return grouping
+  }
   for (const w of naturalWorktrees) {
     let key: string
     let label: string
     let repo: Repo | undefined
     if (isRepoSectionGrouping(groupBy)) {
-      const grouping = getRepoSectionGroupingForRepo(groupBy, w.repoId, repoMap, projectIndex)
+      const grouping = resolveRepoSectionGrouping(groupBy, w.repoId)
       key = grouping.key
       label = grouping.label
       repo = grouping.repo
@@ -1215,7 +1225,7 @@ export function buildRows(
   }
   if (isRepoSectionGrouping(groupBy)) {
     for (const repoId of placeholderRepoIds) {
-      const grouping = getRepoSectionGroupingForRepo(groupBy, repoId, repoMap, projectIndex)
+      const grouping = resolveRepoSectionGrouping(groupBy, repoId)
       if (!grouping.repo) {
         continue
       }
@@ -1236,7 +1246,7 @@ export function buildRows(
   }
   if (isRepoSectionGrouping(groupBy)) {
     for (const [repoId, candidate] of importedWorktreesByRepo) {
-      const grouping = getRepoSectionGroupingForRepo(groupBy, repoId, repoMap, projectIndex)
+      const grouping = resolveRepoSectionGrouping(groupBy, repoId)
       const key = grouping.key
       if (!grouped.has(key)) {
         grouped.set(key, {
@@ -1245,14 +1255,14 @@ export function buildRows(
           repo: grouping.repo ?? candidate.repo,
           repoIds: new Set([repoId])
         })
-      } else if (grouped.has(key)) {
+      } else {
         addRepoIdToGroup(grouped.get(key)!, repoId)
       }
     }
   }
   if (isRepoSectionGrouping(groupBy)) {
     for (const [repoId, candidate] of newExternalWorktreesInboxByRepo) {
-      const grouping = getRepoSectionGroupingForRepo(groupBy, repoId, repoMap, projectIndex)
+      const grouping = resolveRepoSectionGrouping(groupBy, repoId)
       const key = grouping.key
       if (!grouped.has(key)) {
         // Why: the default policy removes pinned worktrees from natural groups,
@@ -1263,14 +1273,14 @@ export function buildRows(
           repo: grouping.repo ?? candidate.repo,
           repoIds: new Set([repoId])
         })
-      } else if (grouped.has(key)) {
+      } else {
         addRepoIdToGroup(grouped.get(key)!, repoId)
       }
     }
   }
   if (isRepoSectionGrouping(groupBy)) {
     for (const repoId of pendingByRepo.keys()) {
-      const grouping = getRepoSectionGroupingForRepo(groupBy, repoId, repoMap, projectIndex)
+      const grouping = resolveRepoSectionGrouping(groupBy, repoId)
       const key = grouping.key
       if (!grouped.has(key)) {
         // Why: creating the first worktree in a repo leaves it with no group yet;
