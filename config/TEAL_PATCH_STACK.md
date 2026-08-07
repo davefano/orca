@@ -58,5 +58,8 @@ branches.
 - Client workspace isolation is excluded until a focused Air/Ultra reproduction
   proves stable upstream still needs it.
 - Paired-terminal recovery PRs #11005, #11416, and #11513 are included in
-  `v1.4.173`. Keep their watch item until the packaged Air -> Ultra -> fleet
-  reconnect and restart smoke passes; do not carry a Teal replacement patch.
+  `v1.4.175`. The same stable base also carries the host-surface, rejected-input,
+  path-owner, and host-partition fixes tracked by
+  `paired-runtime-pane-ownership-recovery`. Keep both watch items until the
+  packaged Air -> Ultra -> fleet reconnect and restart smoke passes; do not
+  carry a Teal replacement patch.

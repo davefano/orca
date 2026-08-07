@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "base": {
     "channel": "stable",
-    "tag": "v1.4.173",
-    "commit": "fcc009ce0"
+    "tag": "v1.4.175",
+    "commit": "c762b2d1f"
   },
   "policy": {
     "description": "Keep OrcaTeal on upstream stable releases and carry only workflow-critical Teal patches that are not upstream.",
@@ -158,7 +158,7 @@
           "role": "workflow-fix"
         }
       ],
-      "decision": "All commits are ancestors of v1.4.173, so Teal carries no replacement patch. Retain this watch item until the Air -> Ultra -> fleet reconnect and restart smoke passes on the packaged build."
+      "decision": "All commits are ancestors of v1.4.175, so Teal carries no replacement patch. Retain this watch item until the Air -> Ultra -> fleet reconnect and restart smoke passes on the packaged build."
     },
     {
       "id": "runtime-reconnect-isolation",
@@ -171,7 +171,40 @@
           "role": "workflow-fix"
         }
       ],
-      "decision": "v1.4.173 contains the upstream fix directly. Teal carries no local reconnect-isolation patch."
+      "decision": "v1.4.175 contains the upstream fix directly. Teal carries no local reconnect-isolation patch."
+    },
+    {
+      "id": "paired-runtime-pane-ownership-recovery",
+      "status": "landed-in-stable-awaiting-fleet-smoke",
+      "reason": "Projected Air panes must not lose Ultra's authoritative host surface, reject input after reattach, or validate an SSH workspace path on the Ultra runtime.",
+      "commits": [
+        {
+          "sha": "cbc005c8a",
+          "subject": "fix(remote-runtime): materialize the host surface when reconnecting a terminal pane (#11542)",
+          "role": "workflow-fix"
+        },
+        {
+          "sha": "d15939c5f",
+          "subject": "fix(terminal): recover rejected paired-runtime input (STA-2830) (#12675)",
+          "role": "workflow-fix"
+        },
+        {
+          "sha": "5ed45739e",
+          "subject": "fix(runtime): make sibling-workspace terminal-path resolution an explicit client opt-in (#12616)",
+          "role": "workflow-fix"
+        },
+        {
+          "sha": "950985645",
+          "subject": "fix(runtime): retire an exited pane's surface in its owning host partition (#12671)",
+          "role": "workflow-fix"
+        },
+        {
+          "sha": "eea0bb64d",
+          "subject": "fix(ssh): make PTY owner admission explicit and non-destructive (#12673)",
+          "role": "workflow-fix"
+        }
+      ],
+      "decision": "These fixes landed after the deployed v1.4.173 base and directly cover the observed Hot Rod and Perceptor ghost-pane, rejected-input, and wrong-runtime path failures. Teal carries no replacement patch; require paired Air -> Ultra -> SSH recovery and typing smokes before deployment."
     }
   ],
   "excluded": [
