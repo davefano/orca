@@ -15,9 +15,8 @@ const MAX_COUNTED_PRS = 2_000
 // (a few per session) and not latency-sensitive for the UI.
 const DEBOUNCE_MS = 5_000
 
-// Why: same timing constraint as persistence.ts — the path must be captured
-// after configureDevUserDataPath() but before app.setName('Orca'). See the
-// comment block in persistence.ts:20-28 for the full explanation.
+// Why: same timing constraint as persistence.ts — capture after
+// configureDevUserDataPath() has explicitly pinned the canonical profile.
 let _statsFile: string | null = null
 
 export function initStatsPath(): void {

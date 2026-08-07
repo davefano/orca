@@ -3,6 +3,20 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 describe('startup ordering', () => {
+  it('sets the stable app name before startup can touch safeStorage', () => {
+    const source = readFileSync(join(process.cwd(), 'src/main/index.ts'), 'utf8')
+    const userDataIndex = source.indexOf('configureDevUserDataPath(is.dev)')
+    const setNameIndex = source.indexOf('app.setName(devInstanceIdentity.appName)')
+    const lockIndex = source.indexOf('const hasSingleInstanceLock')
+    const readyIndex = source.indexOf('void app.whenReady().then')
+
+    expect(userDataIndex).toBeGreaterThanOrEqual(0)
+    expect(setNameIndex).toBeGreaterThan(userDataIndex)
+    expect(setNameIndex).toBeLessThan(lockIndex)
+    expect(setNameIndex).toBeLessThan(readyIndex)
+    expect(source.split('app.setName(devInstanceIdentity.appName)')).toHaveLength(2)
+  })
+
   it('passes the startup barrier into PTY handlers without blocking window creation', () => {
     const source = readFileSync(join(process.cwd(), 'src/main/index.ts'), 'utf8')
     const attachStart = source.indexOf('attachMainWindowServices(')

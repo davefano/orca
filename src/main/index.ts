@@ -588,6 +588,10 @@ if (app.isPackaged && process.platform !== 'win32') {
   })
 }
 configureDevUserDataPath(is.dev)
+// Why: Electron derives the macOS safeStorage Keychain service from app.name.
+// Set the stable OrcaTeal identity immediately after pinning userData so no
+// startup service can touch the regular Orca Keychain item first.
+app.setName(devInstanceIdentity.appName)
 configureOrcaUserDataPathEnv()
 installServeSupervisorDisconnectQuit(isServeMode)
 
@@ -751,7 +755,8 @@ if (hasSingleInstanceLock) {
   installDevParentDisconnectQuit(shouldCoupleToDevParent)
   installDevParentWatchdog(shouldCoupleToDevParent)
   installDevParentSignalQuit(shouldCoupleToDevParent)
-  // Why: run after configureDevUserDataPath but before app.setName('Orca') (whenReady), which changes the resolved path on case-sensitive filesystems.
+  // Why: run after configureDevUserDataPath; that explicit path remains canonical
+  // after the stable OrcaTeal app name is applied.
   initDataPath()
   // Why: use the canonical userData path — late app.getPath('userData') can resolve differently across restarts, defeating persistence.
   initSessionParseCachePersistence({
@@ -759,7 +764,7 @@ if (hasSingleInstanceLock) {
     appVersion: app.getVersion()
   })
   initOrcaProfilePaths()
-  // Why: same timing as initDataPath — capture userData before app.setName changes it. See persistence.ts:20-28.
+  // Why: same timing as initDataPath — use the already-pinned canonical userData path.
   initStatsPath()
   initClaudeUsagePath()
   initCodexUsagePath()
@@ -2036,8 +2041,6 @@ void app.whenReady().then(async () => {
     }
   )
   electronApp.setAppUserModelId(devInstanceIdentity.appUserModelId)
-  // Why: setName drives the macOS safeStorage Keychain item name; use the stable appName (not per-branch `name`) so dev branches share one key and don't re-prompt.
-  app.setName(devInstanceIdentity.appName)
   updateGpuAccelerationAboutPanel()
 
   // Why: managed WSL launchers live outside the Windows app bundle, so keep their launcher/bridge contract synced across app updates.

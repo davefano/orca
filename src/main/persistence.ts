@@ -340,8 +340,9 @@ function retireLegacyInstructionsForClearedTextActionRecipes(
   return changed ? { ...sourceControlAi, instructionsByOperation } : sourceControlAi
 }
 
-// Why capture once (not a module const, not per-call): a const resolves before configureDevUserDataPath() redirects userData (dev/prod collide);
-// per-call resolves after app.setName('Orca') flips path case and loses data on case-sensitive FS. index.ts calls initDataPath() at the right moment.
+// Why capture once (not a module const, not per-call): a const resolves before
+// configureDevUserDataPath() redirects userData (dev/prod collide). index.ts
+// calls initDataPath() after the canonical path is explicitly pinned.
 let _dataFile: string | null = null
 let _userDataDir: string | null = null
 
