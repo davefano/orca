@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "base": {
     "channel": "stable",
-    "tag": "v1.4.175",
-    "commit": "c762b2d1f"
+    "tag": "v1.4.176",
+    "commit": "02cea8a51"
   },
   "policy": {
     "description": "Keep OrcaTeal on upstream stable releases and carry only workflow-critical Teal patches that are not upstream.",
@@ -205,6 +205,34 @@
         }
       ],
       "decision": "These fixes landed after the deployed v1.4.173 base and directly cover the observed Hot Rod and Perceptor ghost-pane, rejected-input, and wrong-runtime path failures. Teal carries no replacement patch; require paired Air -> Ultra -> SSH recovery and typing smokes before deployment."
+    },
+    {
+      "id": "paired-runtime-v176-owner-recovery",
+      "status": "landed-in-stable-awaiting-fleet-smoke",
+      "reason": "Air-projected panes must recover the live Ultra-owned PTY after renderer restarts without stale bindings, detached daemon endpoints, or leaked paired sockets.",
+      "commits": [
+        {
+          "sha": "81e7a2ddf",
+          "subject": "fix(terminal): recover live panes after renderer restart (STA-3536) (#12776)",
+          "role": "workflow-fix"
+        },
+        {
+          "sha": "642869302",
+          "subject": "fix(terminal): recover stale persisted owner bindings (#12976)",
+          "role": "workflow-fix"
+        },
+        {
+          "sha": "7da9368b7",
+          "subject": "fix(terminal): fence detached daemon endpoint ownership (#12709)",
+          "role": "workflow-fix"
+        },
+        {
+          "sha": "211b2d1a3",
+          "subject": "fix(runtime): require consecutive missed probes before reaping a paired socket (#12790)",
+          "role": "workflow-fix"
+        }
+      ],
+      "decision": "All fixes are included in v1.4.176. Teal carries no replacement patch; require repeated Air -> Ultra -> Perceptor recovery, input, renderer-reload, and two-socket smokes before release."
     }
   ],
   "excluded": [
