@@ -1259,7 +1259,7 @@ describe('terminal multiplex RPC', () => {
       for (const [opcode, seq, payload] of [
         [TerminalStreamOpcode.ClaimViewport, 3, encodeTerminalStreamJson({ cols: 88, rows: 28 })],
         [TerminalStreamOpcode.Resize, 4, encodeTerminalStreamJson({ cols: 88, rows: 28 })],
-        [TerminalStreamOpcode.Input, 5, encodeTerminalStreamText('blocked')]
+        [TerminalStreamOpcode.Input, 5, encodeTerminalStreamText('fallback')]
       ] as const) {
         handlers.get(5)?.(
           decodeTerminalStreamFrame(
@@ -1277,7 +1277,14 @@ describe('terminal multiplex RPC', () => {
           false
         )
       )
-      expect(runtime.sendTerminal).toHaveBeenCalledTimes(sentAfterSuccessfulClaim)
+      await vi.waitFor(() =>
+        expect(runtime.sendTerminal).toHaveBeenLastCalledWith('terminal-1', {
+          text: 'fallback',
+          enter: false,
+          interrupt: false
+        })
+      )
+      expect(runtime.sendTerminal).toHaveBeenCalledTimes(sentAfterSuccessfulClaim + 1)
       for (const [opcode, seq, payload] of [
         [TerminalStreamOpcode.ClaimViewport, 6, encodeTerminalStreamJson({ cols: 88, rows: 28 })],
         [TerminalStreamOpcode.Resize, 7, encodeTerminalStreamJson({ cols: 88, rows: 28 })],

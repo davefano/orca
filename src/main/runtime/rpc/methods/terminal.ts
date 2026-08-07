@@ -2152,10 +2152,14 @@ export const TERMINAL_METHODS: RpcAnyMethod[] = [
           if (isTerminalInputLockedForClient(runtime, stream.ptyId, stream.client)) {
             return
           }
-          // Mobile already has the higher-priority floor, so a rejected desktop claim must not suppress later phone input.
-          const inputClaimTail = stream.isMobile ? Promise.resolve(true) : stream.desktopClaimTail
-          void inputClaimTail.then(async (claimed) => {
-            if (!claimed || isTerminalInputLockedForClient(runtime, stream.ptyId, stream.client)) {
+          // Why: serialize desktop input behind any in-flight viewport claim so geometry settles first,
+          // but never turn a healthy shared-control PTY read-only because resize ownership failed.
+          // Desktop input is intentionally independent from remote resize ownership; the mobile floor
+          // remains the only server-side input lock. A failed claim may leave stale geometry, but dropping
+          // all keyboard and mouse input forever is worse and contradicts shared-control semantics.
+          const inputClaimTail = stream.isMobile ? Promise.resolve() : stream.desktopClaimTail
+          void inputClaimTail.then(async () => {
+            if (isTerminalInputLockedForClient(runtime, stream.ptyId, stream.client)) {
               return
             }
             const outcome = await sendTerminalStreamInput(runtime, {
