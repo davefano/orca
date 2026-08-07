@@ -10,7 +10,7 @@
     "upstreamTag": "v1.4.176",
     "sourceCommit": "035f948516f6",
     "packagingCommit": "e15de72e6d",
-    "appVersion": "1.4.176-local.1786127299475.035f948516f6",
+    "appVersion": "1.4.176-local.1786114674072.e15de72e6dd9",
     "appAsarSha256": "10c0bcc8200f1f0475e324dc9b846549192894eca45567f9b74b43052fb90dc3",
     "artifactSha256": "fbd6b34d4d6197afa8db5923fe23b13bfeb7b1bdf7d599d787b6bb1ebca244b8",
     "daemonProtocol": 32
@@ -35,7 +35,8 @@
     "requiredSshTargets": ["wheeljack", "perceptor", "hotrod"],
     "maxRelayGenerationsPerTarget": 1,
     "maxRelayGenerationsByTarget": {
-      "hotrod": 4
+      "wheeljack": 2,
+      "hotrod": 5
     },
     "maxBlankTerminalsPerWorktree": 1
   }
