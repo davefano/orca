@@ -8,11 +8,11 @@
   },
   "release": {
     "upstreamTag": "v1.4.176",
-    "sourceCommit": "035f948516f6",
+    "sourceCommit": "6cc4b5128ed0",
     "packagingCommit": "e15de72e6d",
-    "appVersion": "1.4.176-local.1786114674072.e15de72e6dd9",
-    "appAsarSha256": "10c0bcc8200f1f0475e324dc9b846549192894eca45567f9b74b43052fb90dc3",
-    "artifactSha256": "fbd6b34d4d6197afa8db5923fe23b13bfeb7b1bdf7d599d787b6bb1ebca244b8",
+    "appVersion": "1.4.176-local.1786129501298.6cc4b5128ed0",
+    "appAsarSha256": "dfec34e5c4afdfdd3e270073e39f769d27c7fe2788a7478aa408f3277310ea4e",
+    "artifactSha256": "7e6e00c4b4d08c6a3e181cf978eb833d114d1e48c5222a335975f8ce37dfe93b",
     "daemonProtocol": 32
   },
   "hosts": {
