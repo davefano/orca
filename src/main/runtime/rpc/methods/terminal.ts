@@ -3169,8 +3169,11 @@ export const TERMINAL_METHODS: RpcAnyMethod[] = [
             if (isTerminalInputLockedForClient(runtime, ptyId, params.client)) {
               return
             }
-            void desktopClaimTail.then(async (claimed) => {
-              if (!claimed || isTerminalInputLockedForClient(runtime, ptyId, params.client)) {
+            // Why: legacy single-stream subscribers need the same shared-control semantics as
+            // multiplex subscribers. A rejected viewport claim may leave stale geometry, but it
+            // must not silently turn a healthy desktop PTY read-only forever.
+            void desktopClaimTail.then(async () => {
+              if (isTerminalInputLockedForClient(runtime, ptyId, params.client)) {
                 return
               }
               const outcome = await sendTerminalStreamInput(runtime, {

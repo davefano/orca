@@ -3763,6 +3763,85 @@ describe('terminal multiplex RPC', () => {
     await dispatchPromise
   })
 
+  it('keeps legacy binary desktop input writable after a viewport claim is rejected', async () => {
+    const messages: string[] = []
+    const handlers = new Map<
+      number,
+      (frame: NonNullable<ReturnType<typeof decodeTerminalStreamFrame>>) => void
+    >()
+    const cleanups = new Map<string, () => void>()
+    const runtime = stubRuntime({
+      resolveLeafForHandle: vi.fn().mockReturnValue({ ptyId: 'pty-1' }),
+      readTerminal: vi.fn().mockResolvedValue({ tail: [], truncated: false }),
+      serializeTerminalBuffer: vi.fn().mockResolvedValue(null),
+      getTerminalSize: vi.fn().mockReturnValue({ cols: 120, rows: 40 }),
+      getMobileDisplayMode: vi.fn().mockReturnValue('auto'),
+      getLayout: vi.fn().mockReturnValue({ seq: 1 }),
+      subscribeToTerminalData: vi.fn().mockReturnValue(vi.fn()),
+      subscribeToTerminalResize: vi.fn().mockReturnValue(vi.fn()),
+      subscribeToFitOverrideChanges: vi.fn().mockReturnValue(vi.fn()),
+      getDriver: vi.fn().mockReturnValue({ kind: 'idle' }),
+      registerSubscriptionCleanup: vi.fn((id: string, cleanup: () => void) => {
+        cleanups.set(id, cleanup)
+      }),
+      cleanupSubscription: vi.fn((id: string) => {
+        const cleanup = cleanups.get(id)
+        cleanups.delete(id)
+        cleanup?.()
+      }),
+      waitForTerminal: vi.fn(() => new Promise<RuntimeTerminalWait>(() => {})),
+      sendTerminal: vi.fn().mockResolvedValue({ accepted: true }),
+      updateRemoteDesktopViewer: vi.fn().mockResolvedValue(false)
+    })
+    const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })
+
+    const dispatchPromise = dispatcher.dispatchStreaming(
+      makeRequest('terminal.subscribe', {
+        terminal: 'terminal-1',
+        client: { id: 'desktop-1', type: 'desktop' },
+        capabilities: { terminalBinaryStream: 1, desktopViewportClaims: 1 }
+      }),
+      (message) => messages.push(message),
+      {
+        connectionId: 'conn-subscribe-claim-fallback',
+        sendBinary: vi.fn(),
+        registerBinaryStreamHandler: (streamId, handler) => {
+          handlers.set(streamId, handler)
+          return () => handlers.delete(streamId)
+        }
+      }
+    )
+
+    await vi.waitFor(() =>
+      expect(messages.some((message) => JSON.parse(message).result?.type === 'subscribed')).toBe(
+        true
+      )
+    )
+    const streamId = JSON.parse(
+      messages.find((message) => JSON.parse(message).result?.type === 'subscribed')!
+    ).result.streamId as number
+    for (const [opcode, seq, payload] of [
+      [TerminalStreamOpcode.ClaimViewport, 1, encodeTerminalStreamJson({ cols: 88, rows: 28 })],
+      [TerminalStreamOpcode.Resize, 2, encodeTerminalStreamJson({ cols: 88, rows: 28 })],
+      [TerminalStreamOpcode.Input, 3, encodeTerminalStreamText('fallback')]
+    ] as const) {
+      handlers.get(streamId)?.(
+        decodeTerminalStreamFrame(encodeTerminalStreamFrame({ opcode, streamId, seq, payload }))!
+      )
+    }
+
+    await vi.waitFor(() =>
+      expect(runtime.sendTerminal).toHaveBeenCalledWith('terminal-1', {
+        text: 'fallback',
+        enter: false,
+        interrupt: false
+      })
+    )
+
+    runtime.cleanupSubscription('terminal-1:desktop-1')
+    await dispatchPromise
+  })
+
   it('reports rejected input on a capable legacy binary stream', async () => {
     const messages: string[] = []
     const binaryFrames: Uint8Array<ArrayBufferLike>[] = []
