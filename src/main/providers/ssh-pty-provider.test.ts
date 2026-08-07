@@ -761,9 +761,14 @@ describe('SshPtyProvider', () => {
     )
   })
 
-  it('write sends pty.data notification', () => {
+  it('write sends an acknowledged pty.write request', async () => {
+    mux.request.mockResolvedValue({ accepted: true })
     provider.write(scopedPty1, 'hello')
-    expect(mux.notify).toHaveBeenCalledWith('pty.data', { id: 'pty-1', data: 'hello' })
+    expect(mux.request).toHaveBeenCalledWith(
+      'pty.write',
+      { id: 'pty-1', data: 'hello' },
+      { timeoutMs: 10_000 }
+    )
   })
 
   it('resize sends pty.resize notification', () => {

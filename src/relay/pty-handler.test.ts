@@ -1993,6 +1993,25 @@ describe('PtyHandler', () => {
     expect(mockWrite).toHaveBeenCalledWith('ls\n')
   })
 
+  it('acknowledges PTY writes and rejects missing PTYs', async () => {
+    const mockWrite = vi.fn()
+    mockPtySpawn.mockReturnValue({
+      ...mockPtyInstance,
+      write: mockWrite,
+      onData: vi.fn(),
+      onExit: vi.fn()
+    })
+
+    await dispatcher.callRequest('pty.spawn', {})
+    await expect(
+      dispatcher.callRequest('pty.write', { id: 'pty-1', data: 'pwd\n' })
+    ).resolves.toEqual({ accepted: true })
+    expect(mockWrite).toHaveBeenCalledWith('pwd\n')
+    await expect(
+      dispatcher.callRequest('pty.write', { id: 'pty-missing', data: 'pwd\n' })
+    ).rejects.toThrow('PTY "pty-missing" not found')
+  })
+
   it('resizes PTY via pty.resize notification', async () => {
     const mockResize = vi.fn()
     mockPtySpawn.mockReturnValue({

@@ -205,7 +205,10 @@ export class SshPtyProvider implements IPtyProvider {
   }
 
   write(id: string, data: string): void {
-    this.mux.notify('pty.data', { id: this.toRelayPtyId(id), data })
+    // Why: relay acknowledgment prevents silent writes to disappeared PTY generations.
+    void this.mux
+      .request('pty.write', { id: this.toRelayPtyId(id), data }, { timeoutMs: 10_000 })
+      .catch((error) => console.warn(`[ssh-pty-provider] PTY write failed: ${String(error)}`))
   }
 
   resize(id: string, cols: number, rows: number): void {

@@ -800,6 +800,7 @@ export class PtyHandler {
     this.dispatcher.onRequest('pty.closeStartupQueryAuthority', (p) =>
       this.closeStartupQueryAuthority(p)
     )
+    this.dispatcher.onRequest('pty.write', (p) => this.writeData(p))
 
     this.dispatcher.onNotification('pty.data', (p) => this.writeData(p))
     this.dispatcher.onNotification('pty.resize', (p) => this.resize(p))
@@ -1682,18 +1683,20 @@ export class PtyHandler {
     }
   }
 
-  private writeData(params: Record<string, unknown>): void {
+  private async writeData(params: Record<string, unknown>): Promise<{ accepted: true }> {
     const id = params.id as string
     const data = params.data as string
     if (typeof data !== 'string') {
-      return
+      throw new Error('PTY input must be a string')
     }
     const managed = this.ptys.get(id)
-    if (managed && !managed.disposed) {
-      this.lastInputAtByPty.set(id, performance.now())
-      this.interactiveOutputCharsByPty.set(id, 0)
-      managed.pty.write(data)
+    if (!managed || managed.disposed) {
+      throw new Error(`PTY "${id}" not found`)
     }
+    this.lastInputAtByPty.set(id, performance.now())
+    this.interactiveOutputCharsByPty.set(id, 0)
+    managed.pty.write(data)
+    return { accepted: true }
   }
 
   private resize(params: Record<string, unknown>): void {
