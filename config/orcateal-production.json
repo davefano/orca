@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "freeze": {
+    "status": "frozen",
+    "promotedAt": "2026-08-07",
+    "minimumSoakHours": 24,
+    "requiresExplicitPromotion": true
+  },
+  "release": {
+    "upstreamTag": "v1.4.176",
+    "sourceCommit": "d5d9ef837a",
+    "packagingCommit": "e15de72e6d",
+    "appVersion": "1.4.176-local.1786114674072.e15de72e6dd9",
+    "appAsarSha256": "afa07d2cd7c7caaa2c77d021cedddea9ff775db0f201808082179c3039e23c72",
+    "artifactSha256": "507269cff0d8bebdeea803690dd839e5570ff98d7da370ec5da97c95fba5d8be",
+    "daemonProtocol": 32
+  },
+  "hosts": {
+    "ultraMagnus": {
+      "sshTarget": "davidfano@100.65.239.16",
+      "role": "authoritative-runtime"
+    },
+    "airRaid": {
+      "sshTarget": "davidfano@100.100.108.24",
+      "role": "paired-client"
+    }
+  },
+  "topology": {
+    "authoritativeRuntime": "ultraMagnus",
+    "pairedClient": "airRaid",
+    "serverAddress": "100.65.239.16",
+    "serverPort": 51000,
+    "environmentName": "Ultra Magnus",
+    "expectedPairedConnections": 2,
+    "requiredSshTargets": ["wheeljack", "perceptor", "hotrod"],
+    "maxRelayGenerationsPerTarget": 1,
+    "maxRelayGenerationsByTarget": {
+      "hotrod": 4
+    },
+    "maxBlankTerminalsPerWorktree": 1
+  }
+}

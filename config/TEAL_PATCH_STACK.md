@@ -3,6 +3,11 @@
 OrcaTeal tracks the latest **stable** upstream Orca release. Release candidates
 are test targets, not daily-driver bases.
 
+The daily fleet does not automatically follow every stable release. The exact
+deployed artifact remains frozen in
+[`orcateal-production.json`](./orcateal-production.json) until Dave explicitly
+approves a promoted replacement after the burn-in gate passes.
+
 The machine-readable authority is [`teal-patch-stack.json`](./teal-patch-stack.json).
 Run this before and after every rebase:
 
@@ -49,6 +54,34 @@ branches.
    requirement.
 10. Record tag, commits, artifact hashes, snapshots, and smoke results in the
     Orca operations runbook and durable memory.
+
+## Production freeze and burn-in
+
+Run the live gate from a fleet machine with the Ratchet SSH key:
+
+```bash
+pnpm check:orcateal-fleet -- --ssh-key ~/.ssh/ratchet_fleet
+```
+
+The gate fails on build/hash drift, duplicate OrcaTeal daemon generations,
+competing Dev/PR UIs, non-Teal Orca daemons connected to the production
+runtime, an abnormal Air-to-Ultra paired connection count, a failed
+Ultra-to-fleet SSH smoke, a new relay generation above its frozen ceiling, an
+orphaned terminal, or a reconnect-created blank-terminal burst.
+
+Before replacing the frozen build, run a minimum 24-hour soak at five-minute
+intervals:
+
+```bash
+pnpm check:orcateal-fleet -- --ssh-key ~/.ssh/ratchet_fleet \
+  --samples 288 --interval-seconds 300
+```
+
+Any failed sample resets the soak. Do not move the stable branches, publish an
+artifact, or deploy a new version until the complete soak is green and the
+manual restart/reconnect checks in
+[`ORCATEAL_FLEET_OPERATIONS.md`](./ORCATEAL_FLEET_OPERATIONS.md)
+pass.
 
 ## Deliberate exclusions
 
