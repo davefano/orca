@@ -6099,7 +6099,7 @@ describe('connectPanePty', () => {
     }
   })
 
-  it('blocks remote locked terminal input before it reaches the runtime transport', async () => {
+  it('lets the runtime authoritatively evaluate remote locked terminal input', async () => {
     const { connectPanePty } = await import('./pty-connection')
     const { setDriverForPty } = await import('@/lib/pane-manager/mobile-driver-state')
 
@@ -6130,7 +6130,7 @@ describe('connectPanePty', () => {
       await flushAsyncTicks()
 
       expect(window.api.runtime.restoreTerminalFit).not.toHaveBeenCalled()
-      expect(transport.sendInput).not.toHaveBeenCalled()
+      expect(transport.sendInput).toHaveBeenCalledWith('x')
     } finally {
       setDriverForPty(ptyId, { kind: 'idle' })
     }

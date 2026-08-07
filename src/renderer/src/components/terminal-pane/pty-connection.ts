@@ -4073,7 +4073,13 @@ export function connectPanePty(
     // Why: presence-lock input drop. While mobile is the driver for this
     // PTY, desktop keystrokes must not reach the shell; the visible overlay's
     // explicit Take back action owns restoring desktop input and dimensions.
-    if (currentPtyId && isPtyLocked(currentPtyId)) {
+    // Why: the remote runtime is the authority for a paired terminal's mobile
+    // floor and already rejects desktop multiplex input while mobile owns it.
+    // Mirroring that lock in this renderer can go stale when a driver-change
+    // event races a reconnect, leaving a healthy remote terminal unable to
+    // type or scroll until a full renderer refresh. Keep the local guard for
+    // locally owned PTYs; let paired input reach the authoritative runtime.
+    if (currentPtyId && !isRemoteRuntimePtyId(currentPtyId) && isPtyLocked(currentPtyId)) {
       clearPendingTerminalInputIntent()
       return
     }
