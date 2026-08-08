@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react'
-import { Loader2, ServerOff } from 'lucide-react'
+import { ServerOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { translate } from '@/i18n/i18n'
 import type { PtyTransportRecoveryState } from './pty-transport-types'
@@ -9,11 +8,6 @@ type VisibleRecoveryPhase = Extract<
   'recovering' | 'backoff' | 'disconnected'
 >
 
-// Why: SSH-backed panes briefly revalidate their relay handle on reveal while
-// the paired runtime remains healthy. Do not mislabel that fast reattachment
-// as a runtime outage; sustained recovery still becomes visible.
-export const REMOTE_RUNTIME_RECONNECT_BANNER_DELAY_MS = 1_500
-
 export function TerminalRemoteRuntimeReconnectBanner({
   phase,
   onReconnect
@@ -21,21 +15,10 @@ export function TerminalRemoteRuntimeReconnectBanner({
   phase: VisibleRecoveryPhase
   onReconnect: () => void
 }): React.JSX.Element | null {
-  const retrying = phase !== 'disconnected'
-  const [retryingVisible, setRetryingVisible] = useState(false)
-
-  useEffect(() => {
-    if (!retrying) {
-      return
-    }
-    const timer = setTimeout(
-      () => setRetryingVisible(true),
-      REMOTE_RUNTIME_RECONNECT_BANNER_DELAY_MS
-    )
-    return () => clearTimeout(timer)
-  }, [retrying])
-
-  if (retrying && !retryingVisible) {
+  // Why: pane-stream recovery can outlive a short grace period while the
+  // paired runtime and host relay remain healthy. Keep buffered terminal
+  // content usable instead of presenting automatic reattachment as an outage.
+  if (phase !== 'disconnected') {
     return null
   }
 
@@ -50,44 +33,28 @@ export function TerminalRemoteRuntimeReconnectBanner({
         aria-live="polite"
       >
         <div className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-muted-foreground">
-          {retrying ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <ServerOff className="size-4" />
-          )}
+          <ServerOff className="size-4" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold">
-            {retrying
-              ? translate(
-                  'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.retryingTitle',
-                  'Reconnecting to remote runtime'
-                )
-              : translate(
-                  'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.disconnectedTitle',
-                  'Remote runtime disconnected'
-                )}
+            {translate(
+              'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.disconnectedTitle',
+              'Remote runtime disconnected'
+            )}
           </div>
           <div className="mt-0.5 text-xs leading-5 text-muted-foreground">
-            {retrying
-              ? translate(
-                  'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.retryingBody',
-                  'Orca will retry for up to one minute. This terminal will resume if the connection returns.'
-                )
-              : translate(
-                  'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.disconnectedBody',
-                  'Automatic retries stopped. Reconnect to resume this terminal session.'
-                )}
+            {translate(
+              'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.disconnectedBody',
+              'Automatic retries stopped. Reconnect to resume this terminal session.'
+            )}
           </div>
         </div>
-        {!retrying ? (
-          <Button size="sm" onClick={onReconnect}>
-            {translate(
-              'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.reconnectButton',
-              'Reconnect'
-            )}
-          </Button>
-        ) : null}
+        <Button size="sm" onClick={onReconnect}>
+          {translate(
+            'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.reconnectButton',
+            'Reconnect'
+          )}
+        </Button>
       </div>
     </div>
   )
