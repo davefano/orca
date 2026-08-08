@@ -2343,6 +2343,90 @@ describe('OrcaRuntimeService', () => {
     expect(getSession().activeWorktreeIdsOnShutdown).toEqual([TEST_WORKTREE_ID])
   })
 
+  it('keeps paired terminals writable by demoting a closed desktop graph to headless authority', async () => {
+    const remotePtyId = 'ssh:ssh-1@@persisted-pty'
+    const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(
+      makeWorkspaceSessionWithHeadlessTerminal({
+        tabsByWorktree: {
+          [TEST_WORKTREE_ID]: [
+            {
+              id: 'host-tab',
+              ptyId: remotePtyId,
+              worktreeId: TEST_WORKTREE_ID,
+              title: 'Remote Terminal',
+              customTitle: null,
+              color: null,
+              sortOrder: 0,
+              createdAt: 1
+            }
+          ]
+        },
+        terminalLayoutsByTabId: {
+          'host-tab': makeHeadlessTerminalLayout({ [HEADLESS_LEAF_ID]: remotePtyId })
+        }
+      })
+    )
+    const writes: string[] = []
+    const runtime = new OrcaRuntimeService(runtimeStore as never, undefined, {
+      retainHeadlessGraphOnWindowClose: true
+    } as never)
+    runtime.setPtyController({
+      spawn: vi.fn(),
+      write: (_ptyId, data) => {
+        writes.push(data)
+        return true
+      },
+      kill: () => true,
+      getForegroundProcess: async () => null
+    })
+    runtime.syncWindowGraph(HEADLESS_RUNTIME_WINDOW_ID, { tabs: [], leaves: [] })
+    runtime.registerPty(remotePtyId, TEST_WORKTREE_ID, 'ssh-1', {
+      tabId: 'host-tab',
+      leafId: HEADLESS_LEAF_ID
+    })
+    runtime.attachWindow(TEST_WINDOW_ID)
+    runtime.syncWindowGraph(TEST_WINDOW_ID, {
+      tabs: [
+        {
+          tabId: 'host-tab',
+          worktreeId: TEST_WORKTREE_ID,
+          title: 'Remote Terminal',
+          activeLeafId: HEADLESS_LEAF_ID,
+          layout: null
+        }
+      ],
+      leaves: [
+        {
+          tabId: 'host-tab',
+          worktreeId: TEST_WORKTREE_ID,
+          leafId: HEADLESS_LEAF_ID,
+          paneRuntimeId: 1,
+          paneTitle: 'Remote Terminal',
+          ptyId: remotePtyId
+        }
+      ]
+    })
+
+    runtime.markGraphUnavailable(TEST_WINDOW_ID)
+
+    expect(runtime.getStatus()).toMatchObject({
+      authoritativeWindowId: HEADLESS_RUNTIME_WINDOW_ID,
+      graphStatus: 'ready'
+    })
+    const [terminal] = (await runtime.listTerminals(`id:${TEST_WORKTREE_ID}`)).terminals
+    expect(terminal).toMatchObject({ ptyId: remotePtyId, connected: true, writable: true })
+    await expect(
+      runtime.sendTerminal(terminal!.handle, { text: 'still writable after window close' })
+    ).resolves.toMatchObject({ accepted: true })
+    expect(writes).toEqual(['still writable after window close'])
+
+    runtime.attachWindow(2)
+    expect(runtime.getStatus()).toMatchObject({
+      authoritativeWindowId: 2,
+      graphStatus: 'reloading'
+    })
+  })
+
   it('preserves live SSH session identities when promoting a headless runtime', () => {
     const remotePtyId = 'ssh:ssh-1@@persisted-pty'
     const { runtimeStore, getSession } = makeRuntimeStoreWithWorkspaceSession(

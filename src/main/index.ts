@@ -2376,6 +2376,10 @@ void app.whenReady().then(async () => {
       }
     },
     getDesktopWindowStatus: getDesktopWindowStatus,
+    // Why: OrcaTeal is an always-on coding server for paired Air/mobile clients.
+    // Closing Ultra's desktop window must demote to the existing headless graph,
+    // not invalidate otherwise-live fleet SSH terminals.
+    retainHeadlessGraphOnWindowClose: true,
     // Why: worktree.ps pulls hook-reported agent status (same source as the desktop sidebar) at query time so mobile shows the same agents.
     getAgentStatusSnapshot: () =>
       agentHookServer.getStatusSnapshot().filter((entry) => entry.providerSessionOnly !== true),
