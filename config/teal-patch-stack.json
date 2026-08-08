@@ -6,11 +6,11 @@
     "commit": "02cea8a51"
   },
   "policy": {
-    "description": "Keep OrcaTeal on upstream stable releases and carry only workflow-critical Teal patches that are not upstream.",
+    "description": "Keep the OrcaTeal coding server pinned to upstream v1.4.176 and selectively cherry-pick only verified coding-server or mobile fixes.",
     "requiredTopology": "Air Raid UI -> Ultra Magnus runtime -> fleet SSH hosts",
     "forbiddenTopology": "Air Raid UI -> Ultra Magnus runtime -> Air Raid SSH",
-    "releaseBranches": ["teal/orca-stable", "teal/orcateal-stable"],
-    "upstreamReviewRule": "Every rebase must run verify:teal-patch-stack against the new stable tag. Exact upstream equivalents require an explicit keep/drop decision before release."
+    "releaseBranches": ["teal/coding-server-v1.4.176"],
+    "upstreamReviewRule": "Never rebase or merge upstream wholesale. Every selective cherry-pick must run verify:teal-patch-stack against v1.4.176; exact upstream equivalents require an explicit keep/drop decision before release."
   },
   "patches": [
     {
@@ -133,6 +133,98 @@
       ],
       "verification": [
         "pnpm vitest run --config config/vitest.config.ts config/scripts/electron-builder-config.test.mjs config/scripts/mac-build-compatibility.test.mjs src/main/local-builds/local-build-candidate.test.ts src/main/startup/configure-process.test.ts src/main/startup/dev-instance-identity.test.ts src/main/window/attach-main-window-services.test.ts src/shared/local-build-compatibility.test.ts"
+      ]
+    },
+    {
+      "id": "paired-runtime-input-authority",
+      "order": 60,
+      "disposition": "required",
+      "reason": "Air-projected fleet terminals must remain writable when a renderer-side claim or resize races Ultra's authoritative runtime owner.",
+      "upstream": { "kind": "internal", "reference": null, "status": "teal-only" },
+      "sourceCommits": [
+        {
+          "sha": "f258643809",
+          "subject": "fix(remote): keep desktop terminal input writable after resize claim failure"
+        },
+        {
+          "sha": "f630f3a836",
+          "subject": "Fix legacy remote terminal input after claim failure"
+        },
+        { "sha": "035f948516", "subject": "Acknowledge SSH relay terminal writes" },
+        { "sha": "6cc4b5128e", "subject": "fix(remote): defer paired input locks to runtime" }
+      ],
+      "requiredPaths": [
+        "src/main/runtime/rpc/methods/terminal.ts",
+        "src/main/providers/ssh-pty-provider.ts",
+        "src/relay/pty-handler.ts",
+        "src/renderer/src/components/terminal-pane/pty-connection.ts"
+      ],
+      "verification": [
+        "pnpm vitest run --config config/vitest.config.ts src/main/runtime/rpc/terminal-multiplex.test.ts src/main/providers/ssh-pty-provider.test.ts src/relay/pty-handler.test.ts src/renderer/src/components/terminal-pane/pty-connection.test.ts"
+      ]
+    },
+    {
+      "id": "paired-terminal-socket-ownership",
+      "order": 70,
+      "disposition": "required",
+      "reason": "Each Air renderer may own only one terminal multiplexer per Ultra environment, and stale late connections must not reclaim ownership.",
+      "upstream": { "kind": "internal", "reference": null, "status": "teal-only" },
+      "sourceCommits": [
+        {
+          "sha": "be90e56a13",
+          "subject": "fix(remote): enforce paired terminal socket ownership"
+        }
+      ],
+      "requiredPaths": [
+        "src/main/ipc/runtime-environment-subscriptions.ts",
+        "src/shared/remote-runtime-client.ts"
+      ],
+      "verification": [
+        "pnpm vitest run --config config/vitest.config.ts src/main/ipc/runtime-environments.test.ts src/shared/remote-runtime-client.test.ts"
+      ]
+    },
+    {
+      "id": "paired-pane-recovery-ui",
+      "order": 80,
+      "disposition": "required",
+      "reason": "Automatic paired-pane recovery must stay non-blocking and must not present transient reconnect state as a terminal failure.",
+      "upstream": { "kind": "internal", "reference": null, "status": "teal-only" },
+      "sourceCommits": [
+        {
+          "sha": "ee63e1e830",
+          "subject": "fix(remote): suppress transient pane recovery banner"
+        },
+        {
+          "sha": "c2c44eeef3",
+          "subject": "fix(remote): keep automatic pane recovery non-blocking"
+        }
+      ],
+      "requiredPaths": [
+        "src/renderer/src/components/terminal-pane/TerminalRemoteRuntimeReconnectBanner.tsx"
+      ],
+      "verification": [
+        "pnpm vitest run --config config/vitest.config.ts src/renderer/src/components/terminal-pane/TerminalRemoteRuntimeReconnectBanner.test.tsx"
+      ]
+    },
+    {
+      "id": "windowless-coding-server-runtime",
+      "order": 90,
+      "disposition": "required",
+      "reason": "Ultra must keep the paired runtime graph and nested fleet SSH providers alive when its desktop window is closed or inactive.",
+      "upstream": { "kind": "internal", "reference": null, "status": "teal-only" },
+      "sourceCommits": [
+        {
+          "sha": "3ac459c106",
+          "subject": "fix(runtime): keep paired SSH graph alive windowless"
+        }
+      ],
+      "requiredPaths": [
+        "src/main/runtime/orca-runtime.ts",
+        "tests/e2e/nested-runtime-ssh-windowless.spec.ts"
+      ],
+      "verification": [
+        "pnpm vitest run --config config/vitest.config.ts src/main/runtime/orca-runtime.test.ts",
+        "pnpm test:e2e:nested-runtime-ssh"
       ]
     }
   ],

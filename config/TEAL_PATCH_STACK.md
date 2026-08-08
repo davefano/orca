@@ -1,7 +1,8 @@
 # Teal Orca Patch Stack
 
-OrcaTeal tracks the latest **stable** upstream Orca release. Release candidates
-are test targets, not daily-driver bases.
+OrcaTeal's coding-server release line is pinned to upstream **v1.4.176**.
+Release candidates and later upstream releases are review sources, not
+daily-driver bases.
 
 The daily fleet does not automatically follow every stable release. The exact
 deployed artifact remains frozen in
@@ -9,10 +10,10 @@ deployed artifact remains frozen in
 approves a promoted replacement after the burn-in gate passes.
 
 The machine-readable authority is [`teal-patch-stack.json`](./teal-patch-stack.json).
-Run this before and after every rebase:
+Run this before and after every selective upstream import:
 
 ```bash
-pnpm verify:teal-patch-stack -- --base vX.Y.Z --strict
+pnpm verify:teal-patch-stack -- --base v1.4.176 --strict
 ```
 
 The audit checks patch order, required files, excluded patches, and exact
@@ -21,39 +22,35 @@ result is a required review stop: remove the Teal patch or document why the
 upstream implementation does not satisfy the fleet workflow.
 
 The manifest also carries an upstream watchlist for dependency-heavy fixes we
-must not lose sight of but should not transplant casually. Each stable rebase
-reports whether those donor commits are now ancestors of the base and whether
-the current Teal implementation is patch-equivalent.
+must not lose sight of but should not transplant casually. Each selective
+import reports whether those donor commits are already ancestors of the base
+and whether the current Teal implementation is patch-equivalent.
 
-## Maintained branches
+## Maintained branch
 
-- `teal/orca-stable`: stable upstream plus behavior patches.
-- `teal/orcateal-stable`: `teal/orca-stable` plus isolated OrcaTeal packaging.
+- `teal/coding-server-v1.4.176`: the only coding-server release branch. It
+  includes isolated OrcaTeal packaging, mobile support, paired-runtime
+  ownership hardening, and the windowless runtime graph.
 
-Do not build daily artifacts from temporary reset, PR, or release-candidate
-branches.
+Do not rebase this branch. Do not build daily artifacts from temporary reset,
+PR, release-candidate, or historical `teal/coding-server` branches.
 
 ## Release procedure
 
-1. Fetch upstream tags and identify the newest non-prerelease tag.
-2. Create a staging branch from that tag.
-3. Run the patch audit against the new tag before applying Teal commits.
-4. Review every `upstream-equivalent` result and every conflict. Never restore
-   old terminal-routing or recovery code solely because it existed previously.
-   Review every watch item too: promote it only when the complete dependency
-   chain is in stable, or when a focused production reproduction justifies a
-   small reviewed backport.
-5. Apply the source patches in manifest order and run each patch's focused
-   verification command.
-6. Run the complete source verification gates.
-7. Apply OrcaTeal packaging on the packaging branch and build one signed
-   artifact.
-8. Snapshot the Air and Ultra apps and profiles. Deploy Ultra first, then Air.
-9. Verify Air UI -> Ultra runtime -> at least three fleet SSH hosts, including
+1. Start a short-lived review branch from `teal/coding-server-v1.4.176`.
+2. Cherry-pick only the upstream commit needed for a confirmed coding-server or
+   mobile defect. Never merge or rebase upstream wholesale.
+3. Run the patch audit against `v1.4.176` and review every conflict or
+   `upstream-equivalent` result.
+4. Run the imported patch's focused verification and the complete source gates.
+5. Build one signed OrcaTeal artifact from the reviewed branch.
+6. Snapshot the Air and Ultra apps and profiles. Deploy Ultra first, then Air.
+7. Verify Air UI -> Ultra runtime -> at least three fleet SSH hosts, including
    reconnect and fresh-terminal streaming. Air -> Ultra -> Air is not a release
    requirement.
-10. Record tag, commits, artifact hashes, snapshots, and smoke results in the
-    Orca operations runbook and durable memory.
+8. Record base, commits, artifact hashes, snapshots, and smoke results in the
+   Orca operations runbook and durable memory.
+9. Fast-forward `teal/coding-server-v1.4.176` only after the live gate passes.
 
 ## Production freeze and burn-in
 
