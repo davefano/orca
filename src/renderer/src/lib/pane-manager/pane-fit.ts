@@ -24,11 +24,16 @@ import {
 import { notifyPaneFitSucceeded } from './pane-fit-webgl-attach-signal'
 import { recordPaneFitClientSize } from './pane-fit-client-size'
 import {
-  clearDeferredFitContinuation,
-  clearDeferredFitContinuations,
-  deferFitContinuation,
-  flushDeferredFitContinuations
-} from './pane-fit-deferred-continuations'
+  cancelPendingSafeFitContinuation,
+  releasePendingSafeFitContinuationsUntilMeasurable,
+  flushPendingSafeFitContinuations,
+  hasPendingSafeFitContinuations,
+  isPendingSafeFitContinuationCurrent,
+  pruneStaleSafeFitContinuations,
+  registerPendingSafeFitContinuation,
+  releaseSafeFitContinuationUntilMeasurable
+} from './pane-fit-continuation-registry'
+import type { PendingSafeFitContinuation } from './pane-fit-continuation-registry'
 
 const MIN_PANE_FIT_WIDTH_PX = 48
 const MIN_PANE_FIT_HEIGHT_PX = 24
@@ -39,18 +44,6 @@ export type SafeFitContinuationHandle = {
   completion: Promise<boolean>
   cancel: () => void
 }
-
-type PendingSafeFitContinuation = {
-  continuation: () => void
-  shouldContinue: () => boolean
-  resolve: (completed: boolean) => void
-  deferIfHidden: boolean
-}
-
-const pendingSafeFitContinuations = new WeakMap<
-  ManagedPane,
-  Map<string, PendingSafeFitContinuation>
->()
 
 function getProposedDimensions(pane: ManagedPane): { cols: number; rows: number } | null {
   try {
@@ -166,45 +159,10 @@ function performSafeFit(pane: ManagedPane): boolean {
   }
 }
 
-function settlePendingSafeFitContinuation(
-  pane: ManagedPane,
-  operationKey: string,
-  pending: PendingSafeFitContinuation,
-  completed: boolean
-): void {
-  const operations = pendingSafeFitContinuations.get(pane)
-  if (operations?.get(operationKey) !== pending) {
-    return
-  }
-  operations.delete(operationKey)
-  if (operations.size === 0) {
-    pendingSafeFitContinuations.delete(pane)
-    clearPaneFitContinuationRetry(pane)
-  }
-  pending.resolve(completed)
-}
-
-export function flushPendingSafeFitContinuations(pane: ManagedPane): void {
-  // A hidden reattach resolves its caller immediately but still owes the PTY
-  // the destination grid and SIGWINCH on the first measurable reveal.
-  flushDeferredFitContinuations(pane)
-  const operations = pendingSafeFitContinuations.get(pane)
-  if (!operations) {
-    return
-  }
-  for (const [operationKey, pending] of operations) {
-    if (!pending.shouldContinue()) {
-      settlePendingSafeFitContinuation(pane, operationKey, pending, false)
-      continue
-    }
-    try {
-      pending.continuation()
-      settlePendingSafeFitContinuation(pane, operationKey, pending, true)
-    } catch {
-      settlePendingSafeFitContinuation(pane, operationKey, pending, false)
-    }
-  }
-}
+export {
+  cancelPendingSafeFitContinuations,
+  flushPendingSafeFitContinuations
+} from './pane-fit-continuation-registry'
 
 export function safeFit(pane: ManagedPane): boolean {
   const completed = performSafeFit(pane)
@@ -221,50 +179,11 @@ export function safeFit(pane: ManagedPane): boolean {
   return completed
 }
 
-function pruneStaleSafeFitContinuations(pane: ManagedPane): void {
-  const operations = pendingSafeFitContinuations.get(pane)
-  if (!operations) {
-    return
-  }
-  for (const [operationKey, pending] of operations) {
-    if (!pending.shouldContinue()) {
-      settlePendingSafeFitContinuation(pane, operationKey, pending, false)
-    } else if (isManagedPaneDisplayNone(pane)) {
-      releaseSafeFitContinuationUntilMeasurable(pane, operationKey, pending)
-    }
-  }
-}
-
-function releasePendingSafeFitContinuationsUntilMeasurable(pane: ManagedPane): void {
-  const operations = pendingSafeFitContinuations.get(pane)
-  if (!operations) {
-    return
-  }
-  for (const [operationKey, pending] of Array.from(operations.entries())) {
-    releaseSafeFitContinuationUntilMeasurable(pane, operationKey, pending)
-  }
-}
-
-function releaseSafeFitContinuationUntilMeasurable(
-  pane: ManagedPane,
-  operationKey: string,
-  pending: PendingSafeFitContinuation
-): void {
-  const operations = pendingSafeFitContinuations.get(pane)
-  if (operations?.get(operationKey) !== pending) {
-    return
-  }
-  settlePendingSafeFitContinuation(pane, operationKey, pending, false)
-  if (pending.deferIfHidden) {
-    deferFitContinuation(pane, operationKey, pending)
-  }
-}
-
 function armSafeFitContinuationRetry(pane: ManagedPane): void {
   armPaneFitContinuationRetry(pane, {
     retry: () => {
       pruneStaleSafeFitContinuations(pane)
-      if (!pendingSafeFitContinuations.get(pane)?.size) {
+      if (!hasPendingSafeFitContinuations(pane)) {
         return true
       }
       return safeFit(pane)
@@ -275,19 +194,6 @@ function armSafeFitContinuationRetry(pane: ManagedPane): void {
       releasePendingSafeFitContinuationsUntilMeasurable(pane)
     }
   })
-}
-
-export function cancelPendingSafeFitContinuations(pane: ManagedPane): void {
-  clearPaneFitContinuationRetry(pane)
-  clearDeferredFitContinuations(pane)
-  const operations = pendingSafeFitContinuations.get(pane)
-  if (!operations) {
-    return
-  }
-  pendingSafeFitContinuations.delete(pane)
-  for (const pending of operations.values()) {
-    pending.resolve(false)
-  }
 }
 
 // Why: callers that forward xterm's grid to a PTY must wait for a measurable
@@ -302,12 +208,6 @@ export function safeFitAndThen(
     deferIfHidden?: boolean
   } = {}
 ): SafeFitContinuationHandle {
-  const operations = pendingSafeFitContinuations.get(pane) ?? new Map()
-  const replaced = operations.get(operationKey)
-  if (replaced) {
-    settlePendingSafeFitContinuation(pane, operationKey, replaced, false)
-  }
-  clearDeferredFitContinuation(pane, operationKey)
   let resolveCompletion = (_completed: boolean): void => {}
   const completion = new Promise<boolean>((resolve) => {
     resolveCompletion = resolve
@@ -318,12 +218,9 @@ export function safeFitAndThen(
     resolve: resolveCompletion,
     deferIfHidden: options.deferIfHidden === true
   }
-  const currentOperations = pendingSafeFitContinuations.get(pane) ?? operations
-  currentOperations.set(operationKey, pending)
-  pendingSafeFitContinuations.set(pane, currentOperations)
+  registerPendingSafeFitContinuation(pane, operationKey, pending)
   const cancel = (): void => {
-    settlePendingSafeFitContinuation(pane, operationKey, pending, false)
-    clearDeferredFitContinuation(pane, operationKey)
+    cancelPendingSafeFitContinuation(pane, operationKey, pending)
   }
   if (!pending.shouldContinue()) {
     cancel()
@@ -334,7 +231,7 @@ export function safeFitAndThen(
       pane.terminal,
       `safe-fit-and-then:${operationKey}`,
       () => {
-        if (pendingSafeFitContinuations.get(pane)?.get(operationKey) === pending) {
+        if (isPendingSafeFitContinuationCurrent(pane, operationKey, pending)) {
           if (!safeFit(pane) && options.retryIfUnmeasurable) {
             if (isManagedPaneDisplayNone(pane)) {
               releaseSafeFitContinuationUntilMeasurable(pane, operationKey, pending)
