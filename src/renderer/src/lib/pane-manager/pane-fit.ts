@@ -23,6 +23,12 @@ import {
 } from './terminal-scroll-intent-rebuild'
 import { notifyPaneFitSucceeded } from './pane-fit-webgl-attach-signal'
 import { recordPaneFitClientSize } from './pane-fit-client-size'
+import {
+  clearDeferredFitContinuation,
+  clearDeferredFitContinuations,
+  deferFitContinuation,
+  flushDeferredFitContinuations
+} from './pane-fit-deferred-continuations'
 
 const MIN_PANE_FIT_WIDTH_PX = 48
 const MIN_PANE_FIT_HEIGHT_PX = 24
@@ -38,6 +44,7 @@ type PendingSafeFitContinuation = {
   continuation: () => void
   shouldContinue: () => boolean
   resolve: (completed: boolean) => void
+  deferIfHidden: boolean
 }
 
 const pendingSafeFitContinuations = new WeakMap<
@@ -178,6 +185,9 @@ function settlePendingSafeFitContinuation(
 }
 
 export function flushPendingSafeFitContinuations(pane: ManagedPane): void {
+  // A hidden reattach resolves its caller immediately but still owes the PTY
+  // the destination grid and SIGWINCH on the first measurable reveal.
+  flushDeferredFitContinuations(pane)
   const operations = pendingSafeFitContinuations.get(pane)
   if (!operations) {
     return
@@ -217,19 +227,36 @@ function pruneStaleSafeFitContinuations(pane: ManagedPane): void {
     return
   }
   for (const [operationKey, pending] of operations) {
-    if (!pending.shouldContinue() || isManagedPaneDisplayNone(pane)) {
+    if (!pending.shouldContinue()) {
       settlePendingSafeFitContinuation(pane, operationKey, pending, false)
+    } else if (isManagedPaneDisplayNone(pane)) {
+      releaseSafeFitContinuationUntilMeasurable(pane, operationKey, pending)
     }
   }
 }
 
-function failPendingSafeFitContinuations(pane: ManagedPane): void {
+function releasePendingSafeFitContinuationsUntilMeasurable(pane: ManagedPane): void {
   const operations = pendingSafeFitContinuations.get(pane)
   if (!operations) {
     return
   }
   for (const [operationKey, pending] of Array.from(operations.entries())) {
-    settlePendingSafeFitContinuation(pane, operationKey, pending, false)
+    releaseSafeFitContinuationUntilMeasurable(pane, operationKey, pending)
+  }
+}
+
+function releaseSafeFitContinuationUntilMeasurable(
+  pane: ManagedPane,
+  operationKey: string,
+  pending: PendingSafeFitContinuation
+): void {
+  const operations = pendingSafeFitContinuations.get(pane)
+  if (operations?.get(operationKey) !== pending) {
+    return
+  }
+  settlePendingSafeFitContinuation(pane, operationKey, pending, false)
+  if (pending.deferIfHidden) {
+    deferFitContinuation(pane, operationKey, pending)
   }
 }
 
@@ -245,13 +272,14 @@ function armSafeFitContinuationRetry(pane: ManagedPane): void {
     onExhausted: () => {
       // Why: a reveal transaction must degrade after its bounded layout wait;
       // leaving completion pending forever blocks deferred output release.
-      failPendingSafeFitContinuations(pane)
+      releasePendingSafeFitContinuationsUntilMeasurable(pane)
     }
   })
 }
 
 export function cancelPendingSafeFitContinuations(pane: ManagedPane): void {
   clearPaneFitContinuationRetry(pane)
+  clearDeferredFitContinuations(pane)
   const operations = pendingSafeFitContinuations.get(pane)
   if (!operations) {
     return
@@ -268,13 +296,18 @@ export function safeFitAndThen(
   pane: ManagedPane,
   operationKey: string,
   continuation: () => void,
-  options: { shouldContinue?: () => boolean; retryIfUnmeasurable?: boolean } = {}
+  options: {
+    shouldContinue?: () => boolean
+    retryIfUnmeasurable?: boolean
+    deferIfHidden?: boolean
+  } = {}
 ): SafeFitContinuationHandle {
   const operations = pendingSafeFitContinuations.get(pane) ?? new Map()
   const replaced = operations.get(operationKey)
   if (replaced) {
     settlePendingSafeFitContinuation(pane, operationKey, replaced, false)
   }
+  clearDeferredFitContinuation(pane, operationKey)
   let resolveCompletion = (_completed: boolean): void => {}
   const completion = new Promise<boolean>((resolve) => {
     resolveCompletion = resolve
@@ -282,13 +315,15 @@ export function safeFitAndThen(
   const pending: PendingSafeFitContinuation = {
     continuation,
     shouldContinue: options.shouldContinue ?? (() => true),
-    resolve: resolveCompletion
+    resolve: resolveCompletion,
+    deferIfHidden: options.deferIfHidden === true
   }
   const currentOperations = pendingSafeFitContinuations.get(pane) ?? operations
   currentOperations.set(operationKey, pending)
   pendingSafeFitContinuations.set(pane, currentOperations)
   const cancel = (): void => {
     settlePendingSafeFitContinuation(pane, operationKey, pending, false)
+    clearDeferredFitContinuation(pane, operationKey)
   }
   if (!pending.shouldContinue()) {
     cancel()
@@ -302,7 +337,7 @@ export function safeFitAndThen(
         if (pendingSafeFitContinuations.get(pane)?.get(operationKey) === pending) {
           if (!safeFit(pane) && options.retryIfUnmeasurable) {
             if (isManagedPaneDisplayNone(pane)) {
-              cancel()
+              releaseSafeFitContinuationUntilMeasurable(pane, operationKey, pending)
             } else {
               armSafeFitContinuationRetry(pane)
             }
@@ -315,7 +350,7 @@ export function safeFitAndThen(
   }
   if (!safeFit(pane) && options.retryIfUnmeasurable) {
     if (isManagedPaneDisplayNone(pane)) {
-      cancel()
+      releaseSafeFitContinuationUntilMeasurable(pane, operationKey, pending)
     } else {
       armSafeFitContinuationRetry(pane)
     }
