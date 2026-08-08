@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Loader2, ServerOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { translate } from '@/i18n/i18n'
@@ -8,14 +9,35 @@ type VisibleRecoveryPhase = Extract<
   'recovering' | 'backoff' | 'disconnected'
 >
 
+// Why: SSH-backed panes briefly revalidate their relay handle on reveal while
+// the paired runtime remains healthy. Do not mislabel that fast reattachment
+// as a runtime outage; sustained recovery still becomes visible.
+export const REMOTE_RUNTIME_RECONNECT_BANNER_DELAY_MS = 1_500
+
 export function TerminalRemoteRuntimeReconnectBanner({
   phase,
   onReconnect
 }: {
   phase: VisibleRecoveryPhase
   onReconnect: () => void
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const retrying = phase !== 'disconnected'
+  const [retryingVisible, setRetryingVisible] = useState(false)
+
+  useEffect(() => {
+    if (!retrying) {
+      return
+    }
+    const timer = setTimeout(
+      () => setRetryingVisible(true),
+      REMOTE_RUNTIME_RECONNECT_BANNER_DELAY_MS
+    )
+    return () => clearTimeout(timer)
+  }, [retrying])
+
+  if (retrying && !retryingVisible) {
+    return null
+  }
 
   return (
     <div
