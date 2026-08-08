@@ -11,6 +11,13 @@ import {
 import { closeRemoteRuntimeRequestConnection } from './runtime-environment-request-connections'
 import { registerRuntimeEnvironmentRecoveryHandler } from './runtime-environment-recovery-handler'
 import {
+  claimRemoteRuntimeSubscriptionSequence,
+  closeSubscriptionsForEnvironment,
+  forgetTerminalMultiplexerOwner,
+  remoteRuntimeSubscriptions,
+  retainRemoteRuntimeSubscription
+} from './runtime-environment-subscriptions'
+import {
   advanceRuntimeEnvironmentTransportGeneration,
   getRuntimeEnvironmentTransportGeneration
 } from './runtime-environment-transport-generation'
@@ -21,40 +28,7 @@ import {
 } from './runtime-environment-transport-routing'
 import { RUNTIME_ENVIRONMENT_HANDLER_CHANNELS } from './runtime-environment-handler-channels'
 
-type RetainedRemoteRuntimeSubscription = RemoteRuntimeSubscription & {
-  environmentId: string
-  ownerWebContentsId: number
-  removeDestroyedListener: () => void
-  notifyClosed: () => void
-}
-const remoteRuntimeSubscriptions = new Map<string, RetainedRemoteRuntimeSubscription>()
 const getUserDataPath = (): string => app.getPath('userData')
-
-function closeSubscriptionsForEnvironment(environmentId: string): void {
-  // Why: removed runtimes must not retain terminal/browser WebSockets until renderer teardown.
-  for (const [subscriptionId, subscription] of remoteRuntimeSubscriptions) {
-    if (subscription.environmentId !== environmentId) {
-      continue
-    }
-    remoteRuntimeSubscriptions.delete(subscriptionId)
-    // Why: one failing teardown must not abandon this environment's other
-    // sockets -- that strands exactly the dead handles this sweep exists to
-    // retire. Guard the two steps independently so neither can skip the other,
-    // and so the isolation stays structural rather than resting on a claim that
-    // nothing inside notifyClosed will ever throw.
-    try {
-      subscription.close()
-    } catch (error) {
-      console.warn('[runtime-environments] subscription close failed during retirement:', error)
-    }
-    try {
-      // Why: a shared-control logical close never calls back, so notify directly.
-      subscription.notifyClosed()
-    } catch (error) {
-      console.warn('[runtime-environments] subscription close notice failed:', error)
-    }
-  }
-}
 export function invalidateRuntimeEnvironmentTransport(environmentId: string): void {
   // Why: a same-id re-pair must retire every transport that still authenticates as the old peer.
   advanceRuntimeEnvironmentTransportGeneration(environmentId)
@@ -115,6 +89,11 @@ export function registerRuntimeEnvironmentHandlers(store: Store): void {
         getRuntimeEnvironmentTransportGeneration(environment.id) === transportGeneration
       const sender = event.sender
       const ownerWebContentsId = sender.id
+      const sequence = claimRemoteRuntimeSubscriptionSequence(
+        args.method,
+        ownerWebContentsId,
+        environment.id
+      )
       let senderDestroyed = sender.isDestroyed()
       let subscription: RemoteRuntimeSubscription | null = null
       let destroyedListenerAttached = false
@@ -127,6 +106,7 @@ export function registerRuntimeEnvironmentHandlers(store: Store): void {
       }
       const closeSubscription = (): void => {
         senderDestroyed = true
+        forgetTerminalMultiplexerOwner(args.method, ownerWebContentsId, environment.id)
         const retained = remoteRuntimeSubscriptions.get(subscriptionId) ?? null
         remoteRuntimeSubscriptions.delete(subscriptionId)
         if (retained) {
@@ -204,12 +184,14 @@ export function registerRuntimeEnvironmentHandlers(store: Store): void {
         subscription.close()
         return { subscriptionId, requestId: subscription.requestId }
       }
-      remoteRuntimeSubscriptions.set(subscriptionId, {
+      retainRemoteRuntimeSubscription(subscriptionId, {
         requestId: subscription.requestId,
         environmentId: environment.id,
+        method: args.method,
         ownerWebContentsId,
         removeDestroyedListener,
         notifyClosed,
+        sequence,
         sendBinary: (bytes) => subscription?.sendBinary(bytes) ?? false,
         close: () => {
           removeDestroyedListener()

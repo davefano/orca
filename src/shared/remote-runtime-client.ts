@@ -53,6 +53,7 @@ import { MAX_TIMER_DELAY_MS, isSafeTimerDelayMs } from './timer-delay'
 export { RemoteRuntimeClientError } from './remote-runtime-client-error'
 
 type HandshakeState = 'awaiting_ready' | 'awaiting_authenticated' | 'ready'
+const REMOTE_RUNTIME_SUBSCRIPTION_CLOSE_GRACE_MS = 5_000
 
 function ignoreSettledRemoteRuntimeSocketError(): void {}
 
@@ -526,8 +527,53 @@ export async function subscribeRemoteRuntimeRequest<TResult>(
     let settled = false
     let ws: WebSocket | null = null
     let liveness: RemoteRuntimeSocketLivenessMonitor | null = null
+    let closeDeadline: ReturnType<typeof setTimeout> | null = null
+
+    const clearCloseDeadline = (): void => {
+      if (closeDeadline) {
+        clearTimeout(closeDeadline)
+        closeDeadline = null
+      }
+    }
+
+    const closeSocket = (socket: WebSocket | null): void => {
+      if (!socket || socket.readyState === WebSocket.CLOSED) {
+        return
+      }
+      if (closeDeadline) {
+        return
+      }
+      try {
+        socket.close()
+      } catch {
+        try {
+          socket.terminate()
+        } catch {
+          // Ignore best-effort teardown after close itself failed.
+        }
+        return
+      }
+      socket.once('close', clearCloseDeadline)
+      closeDeadline = setTimeout(() => {
+        closeDeadline = null
+        if (socket.readyState === WebSocket.CLOSED) {
+          return
+        }
+        console.warn('[remote-runtime-client] force-terminating stalled subscription close', {
+          method,
+          requestId
+        })
+        try {
+          socket.terminate()
+        } catch (error) {
+          console.warn('[remote-runtime-client] subscription terminate failed:', error)
+        }
+      }, REMOTE_RUNTIME_SUBSCRIPTION_CLOSE_GRACE_MS)
+      closeDeadline.unref?.()
+    }
 
     const cleanupSocketListeners = (): WebSocket | null => {
+      clearCloseDeadline()
       liveness?.stop()
       liveness = null
       sendQueue?.dispose()
@@ -553,11 +599,7 @@ export async function subscribeRemoteRuntimeRequest<TResult>(
 
     const closeSocketAfterCleanup = (): void => {
       const socket = cleanupSocketListeners()
-      try {
-        socket?.close()
-      } catch {
-        // ignore best-effort close
-      }
+      closeSocket(socket)
     }
 
     const timeout = setTimeout(() => {
@@ -570,11 +612,7 @@ export async function subscribeRemoteRuntimeRequest<TResult>(
     }, timeoutMs)
 
     const close = (): void => {
-      try {
-        ws?.close()
-      } catch {
-        // ignore best-effort close
-      }
+      closeSocket(ws)
     }
 
     // Why: client input (keystrokes) must never be dropped under backpressure.

@@ -1688,6 +1688,256 @@ describe('registerRuntimeEnvironmentHandlers', () => {
     markUsedSpy.mockRestore()
   })
 
+  it('keeps one terminal multiplexer per renderer and environment', async () => {
+    registerRuntimeEnvironmentHandlers(store as never)
+    const firstClose = vi.fn()
+    const secondClose = vi.fn()
+    subscribeRemoteRuntimeRequestMock
+      .mockResolvedValueOnce({
+        requestId: 'terminal-multiplex-1',
+        close: firstClose,
+        sendBinary: vi.fn()
+      })
+      .mockResolvedValueOnce({
+        requestId: 'terminal-multiplex-2',
+        close: secondClose,
+        sendBinary: vi.fn()
+      })
+
+    const add = handler<
+      { name: string; pairingCode: string },
+      { environment: { id: string; name: string } }
+    >('runtimeEnvironments:addFromPairingCode')
+    await add(null, { name: 'desk', pairingCode: pairingCode() })
+
+    const sent: unknown[] = []
+    const sender = {
+      id: 1,
+      isDestroyed: () => false,
+      send: (_channel: string, payload: unknown) => sent.push(payload),
+      once: vi.fn(),
+      removeListener: vi.fn()
+    }
+    const subscribe = handler<
+      {
+        selector: string
+        method: string
+        subscriptionId: string
+      },
+      { subscriptionId: string; requestId: string }
+    >('runtimeEnvironments:subscribe')
+    const first = await subscribe(
+      { sender },
+      { selector: 'desk', method: 'terminal.multiplex', subscriptionId: 'multiplex-1' }
+    )
+    const second = await subscribe(
+      { sender },
+      { selector: 'desk', method: 'terminal.multiplex', subscriptionId: 'multiplex-2' }
+    )
+
+    expect(firstClose).toHaveBeenCalledOnce()
+    expect(sent).toContainEqual({ subscriptionId: first.subscriptionId, type: 'close' })
+
+    const unsubscribe = handler<{ subscriptionId: string }, { unsubscribed: boolean }>(
+      'runtimeEnvironments:unsubscribe'
+    )
+    expect(unsubscribe({ sender }, { subscriptionId: first.subscriptionId })).toEqual({
+      unsubscribed: false
+    })
+    expect(unsubscribe({ sender }, { subscriptionId: second.subscriptionId })).toEqual({
+      unsubscribed: true
+    })
+    expect(secondClose).toHaveBeenCalledOnce()
+  })
+
+  it('keeps terminal multiplexers isolated across renderers and environments', async () => {
+    registerRuntimeEnvironmentHandlers(store as never)
+    const closes = [vi.fn(), vi.fn(), vi.fn()]
+    let nextSubscription = 0
+    subscribeRemoteRuntimeRequestMock.mockImplementation(async () => {
+      const index = nextSubscription++
+      return {
+        requestId: `terminal-multiplex-${index}`,
+        close: closes[index],
+        sendBinary: vi.fn()
+      }
+    })
+
+    const add = handler<
+      { name: string; pairingCode: string },
+      { environment: { id: string; name: string } }
+    >('runtimeEnvironments:addFromPairingCode')
+    await add(null, { name: 'desk', pairingCode: pairingCode() })
+    await add(null, { name: 'lab', pairingCode: pairingCode('ws://127.0.0.1:6769') })
+
+    const createSender = (id: number) => ({
+      id,
+      isDestroyed: () => false,
+      send: vi.fn(),
+      once: vi.fn(),
+      removeListener: vi.fn()
+    })
+    const firstSender = createSender(1)
+    const secondSender = createSender(2)
+    const subscribe = handler<
+      { selector: string; method: string; subscriptionId: string },
+      { subscriptionId: string; requestId: string }
+    >('runtimeEnvironments:subscribe')
+    const subscriptions = await Promise.all([
+      subscribe(
+        { sender: firstSender },
+        { selector: 'desk', method: 'terminal.multiplex', subscriptionId: 'desk-first' }
+      ),
+      subscribe(
+        { sender: secondSender },
+        { selector: 'desk', method: 'terminal.multiplex', subscriptionId: 'desk-second' }
+      ),
+      subscribe(
+        { sender: firstSender },
+        { selector: 'lab', method: 'terminal.multiplex', subscriptionId: 'lab-first' }
+      )
+    ])
+
+    expect(closes.every((close) => close.mock.calls.length === 0)).toBe(true)
+    const unsubscribe = handler<{ subscriptionId: string }, { unsubscribed: boolean }>(
+      'runtimeEnvironments:unsubscribe'
+    )
+    expect(
+      unsubscribe({ sender: firstSender }, { subscriptionId: subscriptions[0].subscriptionId })
+    ).toEqual({ unsubscribed: true })
+    expect(
+      unsubscribe({ sender: secondSender }, { subscriptionId: subscriptions[1].subscriptionId })
+    ).toEqual({ unsubscribed: true })
+    expect(
+      unsubscribe({ sender: firstSender }, { subscriptionId: subscriptions[2].subscriptionId })
+    ).toEqual({ unsubscribed: true })
+    expect(closes.every((close) => close.mock.calls.length === 1)).toBe(true)
+  })
+
+  it('keeps concurrent non-multiplexer subscriptions independently active', async () => {
+    registerRuntimeEnvironmentHandlers(store as never)
+    const firstClose = vi.fn()
+    const secondClose = vi.fn()
+    subscribeRemoteRuntimeRequestMock
+      .mockResolvedValueOnce({ requestId: 'tabs-1', close: firstClose, sendBinary: vi.fn() })
+      .mockResolvedValueOnce({ requestId: 'tabs-2', close: secondClose, sendBinary: vi.fn() })
+
+    const add = handler<
+      { name: string; pairingCode: string },
+      { environment: { id: string; name: string } }
+    >('runtimeEnvironments:addFromPairingCode')
+    await add(null, { name: 'desk', pairingCode: pairingCode() })
+    const sender = {
+      id: 1,
+      isDestroyed: () => false,
+      send: vi.fn(),
+      once: vi.fn(),
+      removeListener: vi.fn()
+    }
+    const subscribe = handler<
+      { selector: string; method: string; subscriptionId: string },
+      { subscriptionId: string; requestId: string }
+    >('runtimeEnvironments:subscribe')
+    const first = await subscribe(
+      { sender },
+      { selector: 'desk', method: 'browser.screencast', subscriptionId: 'screencast-1' }
+    )
+    const second = await subscribe(
+      { sender },
+      { selector: 'desk', method: 'browser.screencast', subscriptionId: 'screencast-2' }
+    )
+
+    expect(firstClose).not.toHaveBeenCalled()
+    expect(secondClose).not.toHaveBeenCalled()
+    const unsubscribe = handler<{ subscriptionId: string }, { unsubscribed: boolean }>(
+      'runtimeEnvironments:unsubscribe'
+    )
+    expect(unsubscribe({ sender }, { subscriptionId: first.subscriptionId })).toEqual({
+      unsubscribed: true
+    })
+    expect(unsubscribe({ sender }, { subscriptionId: second.subscriptionId })).toEqual({
+      unsubscribed: true
+    })
+  })
+
+  it('rejects an older terminal multiplexer after its replacement has already closed', async () => {
+    registerRuntimeEnvironmentHandlers(store as never)
+    const firstClose = vi.fn()
+    const secondClose = vi.fn()
+    let resolveFirst:
+      | ((subscription: {
+          requestId: string
+          close: () => void
+          sendBinary: () => boolean
+        }) => void)
+      | undefined
+    subscribeRemoteRuntimeRequestMock
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve
+          })
+      )
+      .mockResolvedValueOnce({
+        requestId: 'terminal-multiplex-newer',
+        close: secondClose,
+        sendBinary: vi.fn()
+      })
+
+    const add = handler<
+      { name: string; pairingCode: string },
+      { environment: { id: string; name: string } }
+    >('runtimeEnvironments:addFromPairingCode')
+    await add(null, { name: 'desk', pairingCode: pairingCode() })
+
+    const sent: unknown[] = []
+    const sender = {
+      id: 1,
+      isDestroyed: () => false,
+      send: (_channel: string, payload: unknown) => sent.push(payload),
+      once: vi.fn(),
+      removeListener: vi.fn()
+    }
+    const subscribe = handler<
+      { selector: string; method: string; subscriptionId: string },
+      { subscriptionId: string; requestId: string }
+    >('runtimeEnvironments:subscribe')
+    const firstPromise = subscribe(
+      { sender },
+      { selector: 'desk', method: 'terminal.multiplex', subscriptionId: 'multiplex-older' }
+    )
+    await vi.waitFor(() => expect(subscribeRemoteRuntimeRequestMock).toHaveBeenCalledOnce())
+    const second = await subscribe(
+      { sender },
+      { selector: 'desk', method: 'terminal.multiplex', subscriptionId: 'multiplex-newer' }
+    )
+    const unsubscribe = handler<{ subscriptionId: string }, { unsubscribed: boolean }>(
+      'runtimeEnvironments:unsubscribe'
+    )
+    expect(unsubscribe({ sender }, { subscriptionId: second.subscriptionId })).toEqual({
+      unsubscribed: true
+    })
+    expect(secondClose).toHaveBeenCalledOnce()
+    expect(resolveFirst).toBeTypeOf('function')
+    resolveFirst!({
+      requestId: 'terminal-multiplex-older',
+      close: firstClose,
+      sendBinary: vi.fn()
+    })
+    const first = await firstPromise
+
+    expect(firstClose).toHaveBeenCalledOnce()
+    expect(sent).toContainEqual({ subscriptionId: first.subscriptionId, type: 'close' })
+
+    expect(unsubscribe({ sender }, { subscriptionId: first.subscriptionId })).toEqual({
+      unsubscribed: false
+    })
+    expect(unsubscribe({ sender }, { subscriptionId: second.subscriptionId })).toEqual({
+      unsubscribed: false
+    })
+    expect(secondClose).toHaveBeenCalledOnce()
+  })
+
   it('closes streaming subscriptions when their saved runtime is removed', async () => {
     registerRuntimeEnvironmentHandlers(store as never)
     const close = vi.fn()
