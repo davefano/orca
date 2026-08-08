@@ -8,6 +8,7 @@ const result = spawnSync(
     'test',
     'tests/e2e/nested-runtime-ssh-routing.spec.ts',
     'tests/e2e/nested-runtime-ssh-lifecycle.spec.ts',
+    'tests/e2e/nested-runtime-ssh-windowless.spec.ts',
     '--config',
     'tests/playwright.config.ts',
     '--project',

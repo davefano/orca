@@ -18,6 +18,7 @@ import {
   type PairedElectronClient
 } from './helpers/paired-electron-client'
 import { createRestartSession } from './helpers/orca-restart'
+import { readRemoteShellPid } from './helpers/nested-runtime-shell-identity'
 import {
   encodeTerminalStreamFrame,
   encodeTerminalStreamJson,
@@ -107,52 +108,6 @@ async function waitForRemoteTerminalMarker(
       { timeout: 30_000 }
     )
     .toContain(marker)
-}
-
-async function readRemoteShellPid(
-  client: PairedElectronClient,
-  ptyId: string,
-  marker: string
-): Promise<string> {
-  const terminal = remoteTerminalHandle(ptyId)
-  const send = await client.page.evaluate(
-    ({ environmentId, marker, terminal }) =>
-      window.api.runtimeEnvironments.call({
-        selector: environmentId,
-        method: 'terminal.send',
-        params: {
-          terminal,
-          text: `printf '${marker}%s\\n' "$$"\n`,
-          client: { id: 'nested-shell-identity', type: 'desktop' }
-        }
-      }),
-    { environmentId: client.environmentId, marker, terminal }
-  )
-  if (!send.ok) {
-    throw new Error(`terminal.send failed: ${JSON.stringify(send)}`)
-  }
-  let pid = ''
-  await expect
-    .poll(
-      async () => {
-        pid = await client.page.evaluate(
-          async ({ environmentId, marker, terminal }) => {
-            const read = await window.api.runtimeEnvironments.call({
-              selector: environmentId,
-              method: 'terminal.read',
-              params: { terminal, limit: 500 }
-            })
-            const match = JSON.stringify(read).match(new RegExp(`${marker}(\\d+)`))
-            return match?.[1] ?? ''
-          },
-          { environmentId: client.environmentId, marker, terminal }
-        )
-        return pid
-      },
-      { timeout: 30_000 }
-    )
-    .not.toBe('')
-  return pid
 }
 
 test('isolates nested SSH worktrees across two HUB runtimes', async ({

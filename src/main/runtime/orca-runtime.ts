@@ -3263,6 +3263,7 @@ export class OrcaRuntimeService {
   private readonly canRecoverPersistentLocalPtysFn: () => boolean
   private readonly buildAgentHookPtyEnv: (() => Record<string, string>) | null
   private readonly getDesktopWindowStatusFn: () => RuntimeDesktopWindowStatus
+  private readonly retainHeadlessGraphOnWindowClose: boolean
   private readonly prepareAiVaultSessionResumeFn:
     | ((args: AiVaultPrepareSessionResumeArgs) => Promise<AiVaultPrepareSessionResumeResult>)
     | null
@@ -3344,6 +3345,7 @@ export class OrcaRuntimeService {
       ) => Promise<AiVaultPrepareSessionResumeResult>
       buildAgentHookPtyEnv?: () => Record<string, string>
       getDesktopWindowStatus?: () => RuntimeDesktopWindowStatus
+      retainHeadlessGraphOnWindowClose?: boolean
       agentSessionClaimSigner?: AgentSessionClaimSigner
       orchestrationEnvironmentTransport?: OrchestrationEnvironmentTransport
     }
@@ -3371,6 +3373,7 @@ export class OrcaRuntimeService {
     this.retireAgentHookCompatibilityAuthorityFn =
       deps?.retireAgentHookCompatibilityAuthority ?? null
     this.canRecoverPersistentLocalPtysFn = deps?.canRecoverPersistentLocalPtys ?? (() => true)
+    this.retainHeadlessGraphOnWindowClose = deps?.retainHeadlessGraphOnWindowClose === true
     // Why: configure the shared AiVault scan cache from a serve-mode-reachable
     // seam so the aiVault.listSessions RPC includes managed-Codex + WSL sessions
     // even on headless `orca serve` hosts where registerCoreHandlers never runs.
@@ -10662,10 +10665,7 @@ export class OrcaRuntimeService {
     // A spawn published (or admission pending) this generation already
     // attaches the provider stream; a replacement under a reused id must not
     // read as the discovered never-attached session it replaced.
-    if (
-      this.spawnPublishedPtys.has(ptyId) ||
-      this.pendingPtyRegistrationIncarnations.has(ptyId)
-    ) {
+    if (this.spawnPublishedPtys.has(ptyId) || this.pendingPtyRegistrationIncarnations.has(ptyId)) {
       return false
     }
     // SSH panes have their own lease/reattach machinery.
@@ -27510,6 +27510,12 @@ export class OrcaRuntimeService {
     if (windowId !== this.authoritativeWindowId) {
       return
     }
+    // Why: the Teal coding server must persist the renderer's last live bindings before
+    // demoting them to the existing headless runtime authority. Otherwise paired clients
+    // keep valid SSH PTYs but lose the graph needed to mount and type into them.
+    if (this.retainHeadlessGraphOnWindowClose) {
+      this.persistWindowlessPtyBindingsForDesktopAttach()
+    }
     // Why: once the authoritative renderer graph disappears, fail closed for live-terminal ops instead of guessing from old state.
     if (this.graphStatus !== 'unavailable') {
       this.rendererGraphEpoch += 1
@@ -27525,6 +27531,13 @@ export class OrcaRuntimeService {
     this.handleByLeafKey.clear()
     // Why: pre-allocated CLI handles must survive graph unavailability so they can be re-adopted on reconnect.
     this.rejectAllWaiters('terminal_handle_stale')
+    if (this.retainHeadlessGraphOnWindowClose) {
+      this.syncWindowGraph(HEADLESS_RUNTIME_WINDOW_ID, { tabs: [], leaves: [] })
+      for (const worktreeId of this.getKnownWorkspaceSessionWorktreeIds()) {
+        this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktreeId, { force: true })
+        this.notifyMobileSessionTabsChangedNow(worktreeId)
+      }
+    }
   }
 
   private assertGraphReady(): void {
