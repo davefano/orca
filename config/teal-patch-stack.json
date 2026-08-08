@@ -6,11 +6,11 @@
     "commit": "fcc009ce0"
   },
   "policy": {
-    "description": "Keep OrcaTeal on upstream stable releases and carry only workflow-critical Teal patches that are not upstream.",
+    "description": "Maintain OrcaTeal as a pinned coding-server fork; treat upstream as a selective donor and carry only workflow-critical Teal patches.",
     "requiredTopology": "Air Raid UI -> Ultra Magnus runtime -> fleet SSH hosts",
     "forbiddenTopology": "Air Raid UI -> Ultra Magnus runtime -> Air Raid SSH",
-    "releaseBranches": ["teal/orca-stable", "teal/orcateal-stable"],
-    "upstreamReviewRule": "Every rebase must run verify:teal-patch-stack against the new stable tag. Exact upstream equivalents require an explicit keep/drop decision before release."
+    "releaseBranches": ["teal/coding-server"],
+    "upstreamReviewRule": "Never rebase the maintained branch onto upstream. Evaluate upstream changes on disposable branches and cherry-pick only explicitly approved commits after the coding-server continuity matrix passes."
   },
   "patches": [
     {
@@ -109,8 +109,29 @@
       ]
     },
     {
-      "id": "orcateal-packaging",
+      "id": "paired-runtime-windowless-authority",
       "order": 50,
+      "disposition": "required",
+      "reason": "Paired Air and mobile clients must retain a writable Ultra-owned runtime graph when Ultra's desktop window closes.",
+      "upstream": { "kind": "internal", "reference": null, "status": "teal-only" },
+      "sourceCommits": [
+        {
+          "sha": "efacd0a33b",
+          "subject": "fix(runtime): keep paired SSH graph alive windowless"
+        }
+      ],
+      "requiredPaths": [
+        "tests/e2e/nested-runtime-ssh-windowless.spec.ts",
+        "tests/e2e/helpers/nested-runtime-shell-identity.ts"
+      ],
+      "verification": [
+        "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/orca-runtime.test.ts src/main/window/attach-main-window-services.test.ts src/main/startup/window-all-closed-quit-policy.test.ts",
+        "pnpm test:e2e:nested-runtime-ssh"
+      ]
+    },
+    {
+      "id": "orcateal-packaging",
+      "order": 60,
       "disposition": "required-packaging-branch",
       "reason": "The daily internal build needs an isolated name, bundle ID, profile, updater policy, and build identity.",
       "upstream": { "kind": "internal", "reference": null, "status": "teal-only" },
@@ -139,7 +160,7 @@
   "upstreamWatchlist": [
     {
       "id": "paired-terminal-recovery",
-      "status": "landed-in-stable-awaiting-fleet-smoke",
+      "status": "landed-in-stable-with-teal-windowless-override",
       "reason": "Air Raid depends on Ultra-hosted SSH terminals surviving parking, reconnect, and shared-control refresh without stale providers or duplicate panes.",
       "commits": [
         {
@@ -158,7 +179,7 @@
           "role": "workflow-fix"
         }
       ],
-      "decision": "All commits are ancestors of v1.4.173, so Teal carries no replacement patch. Retain this watch item until the Air -> Ultra -> fleet reconnect and restart smoke passes on the packaged build."
+      "decision": "All commits are ancestors of v1.4.173. Teal additionally carries paired-runtime-windowless-authority because stable invalidates the graph when Ultra's desktop window closes."
     },
     {
       "id": "runtime-reconnect-isolation",

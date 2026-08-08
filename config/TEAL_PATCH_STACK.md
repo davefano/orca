@@ -1,10 +1,12 @@
 # Teal Orca Patch Stack
 
-OrcaTeal tracks the latest **stable** upstream Orca release. Release candidates
-are test targets, not daily-driver bases.
+OrcaTeal is a maintained coding-server fork pinned to the known-good upstream
+`v1.4.173` base. Upstream releases are donor sources, not automatic upgrade
+targets. Daily builds move only when a selected upstream commit passes the full
+Air/mobile -> Ultra -> fleet SSH continuity matrix.
 
 The machine-readable authority is [`teal-patch-stack.json`](./teal-patch-stack.json).
-Run this before and after every rebase:
+Run this before every release and after every selective upstream cherry-pick:
 
 ```bash
 pnpm verify:teal-patch-stack -- --base vX.Y.Z --strict
@@ -16,39 +18,33 @@ result is a required review stop: remove the Teal patch or document why the
 upstream implementation does not satisfy the fleet workflow.
 
 The manifest also carries an upstream watchlist for dependency-heavy fixes we
-must not lose sight of but should not transplant casually. Each stable rebase
-reports whether those donor commits are now ancestors of the base and whether
-the current Teal implementation is patch-equivalent.
+may evaluate later. Never rebase the maintained branch onto a newer upstream
+release. Test candidate commits on a disposable evaluation branch and
+cherry-pick only the commits we explicitly choose to own.
 
-## Maintained branches
+## Maintained branch
 
-- `teal/orca-stable`: stable upstream plus behavior patches.
-- `teal/orcateal-stable`: `teal/orca-stable` plus isolated OrcaTeal packaging.
+- `teal/coding-server`: pinned source patches, isolated OrcaTeal packaging,
+  paired desktop support, and the mobile web client.
 
-Do not build daily artifacts from temporary reset, PR, or release-candidate
-branches.
+Do not build daily artifacts from upstream, temporary reset, PR, rebase, or
+evaluation branches.
 
 ## Release procedure
 
-1. Fetch upstream tags and identify the newest non-prerelease tag.
-2. Create a staging branch from that tag.
-3. Run the patch audit against the new tag before applying Teal commits.
-4. Review every `upstream-equivalent` result and every conflict. Never restore
-   old terminal-routing or recovery code solely because it existed previously.
-   Review every watch item too: promote it only when the complete dependency
-   chain is in stable, or when a focused production reproduction justifies a
-   small reviewed backport.
-5. Apply the source patches in manifest order and run each patch's focused
-   verification command.
-6. Run the complete source verification gates.
-7. Apply OrcaTeal packaging on the packaging branch and build one signed
-   artifact.
-8. Snapshot the Air and Ultra apps and profiles. Deploy Ultra first, then Air.
-9. Verify Air UI -> Ultra runtime -> at least three fleet SSH hosts, including
-   reconnect and fresh-terminal streaming. Air -> Ultra -> Air is not a release
-   requirement.
-10. Record tag, commits, artifact hashes, snapshots, and smoke results in the
-    Orca operations runbook and durable memory.
+1. Start from `teal/coding-server`; never rebase it onto upstream.
+2. When an upstream change is wanted, create a disposable evaluation branch,
+   cherry-pick the smallest complete dependency chain, and run the patch audit.
+3. Run every manifest verification command. Window close/reopen must preserve
+   the same remote PTY and shell PID for a paired client.
+4. Run the complete source verification gates and build one signed artifact.
+5. Snapshot the Air and Ultra apps and profiles. Deploy the exact same artifact
+   to Ultra first, then Air. Do not restart fleet relays, PTYs, or agents.
+6. Verify Air UI -> Ultra runtime -> HotRod, Perceptor, and one fleet Mac,
+   including app switching, Ultra window close/reopen, reconnect, typing, and
+   fresh-terminal streaming. Verify the mobile web client against Ultra too.
+7. Record base, commits, artifact hashes, snapshots, and smoke results in the
+   Orca operations runbook and durable memory.
 
 ## Deliberate exclusions
 
@@ -58,5 +54,5 @@ branches.
 - Client workspace isolation is excluded until a focused Air/Ultra reproduction
   proves stable upstream still needs it.
 - Paired-terminal recovery PRs #11005, #11416, and #11513 are included in
-  `v1.4.173`. Keep their watch item until the packaged Air -> Ultra -> fleet
-  reconnect and restart smoke passes; do not carry a Teal replacement patch.
+  `v1.4.173`, but they do not preserve runtime graph authority when Ultra's
+  desktop window closes. The Teal windowless-authority patch owns that gap.
