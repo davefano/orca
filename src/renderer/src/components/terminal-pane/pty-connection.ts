@@ -234,7 +234,7 @@ import { createCommandCodeOutputStatusDetector } from '../../../../shared/comman
 import type { PtyDataMeta } from './pty-dispatcher'
 import { getEagerPtyBufferHandle } from './pty-dispatcher'
 import { createTerminalGitHubPRLinkDetector } from '../../../../shared/terminal-github-pr-link-detector'
-import { scheduleTerminalWebglAtlasRecovery } from './terminal-webgl-atlas-recovery'
+import { createTerminalWebglOutputRecovery } from './terminal-webgl-atlas-recovery'
 import {
   CONPTY_DA1_RESPONSE,
   DEFAULT_DA1_RESPONSE,
@@ -1071,6 +1071,9 @@ export function connectPanePty(
   let authoritativeReattachGeneration = 0
   exposeE2eTerminalPtyOutputDebug()
   let disposed = false
+  const terminalWebglOutputRecovery = createTerminalWebglOutputRecovery(() =>
+    manager.schedulePaneRepaint(pane.id, () => !disposed)
+  )
   const structuralReplayCoordinator = createTerminalStructuralReplayCoordinator(pane.terminal)
   let connectFrame: number | null = null
   let connectFallbackTimer: ReturnType<typeof setTimeout> | null = null
@@ -6332,7 +6335,7 @@ export function connectPanePty(
           alternateScreenBufferSwitches !== switchesBeforeParse ||
           pane.terminal.buffer.active.type === 'alternate'
         ) {
-          scheduleTerminalWebglAtlasRecovery()
+          terminalWebglOutputRecovery.schedule()
         }
       }
     }
@@ -6340,7 +6343,7 @@ export function connectPanePty(
     function shouldForceForegroundRenderRefresh(data: string): {
       refresh: boolean
       inPlaceRewrite: boolean
-      recoverWebglAtlasAfterParse: boolean
+      recoverWebglOutputAfterParse: boolean
     } {
       const rewriteOutputPrefersRenderRefresh = foregroundRewriteOutputPrefersRenderRefresh(data)
       const recentInput =
@@ -6349,12 +6352,12 @@ export function connectPanePty(
         return {
           refresh: true,
           inPlaceRewrite: rewriteOutputPrefersRenderRefresh,
-          recoverWebglAtlasAfterParse: true
+          recoverWebglOutputAfterParse: true
         }
       }
       if (rewriteOutputPrefersRenderRefresh) {
         // Why: xterm's buffer is right but in-place redraw cells stay stale in the renderer until a repaint (resize fixes it).
-        return { refresh: true, inPlaceRewrite: true, recoverWebglAtlasAfterParse: false }
+        return { refresh: true, inPlaceRewrite: true, recoverWebglOutputAfterParse: false }
       }
       if (
         windowsEastAsianOutputPrefersRenderRefresh(data, {
@@ -6365,7 +6368,7 @@ export function connectPanePty(
         })
       ) {
         // Why: CJK/Korean from Microsoft Pinyin commits and native ConPTY output can leave stale wide-glyph cells in the Windows DOM renderer.
-        return { refresh: true, inPlaceRewrite: false, recoverWebglAtlasAfterParse: false }
+        return { refresh: true, inPlaceRewrite: false, recoverWebglOutputAfterParse: false }
       }
       return {
         refresh:
@@ -6373,7 +6376,7 @@ export function connectPanePty(
           containsNonAsciiOutput(data) &&
           containsWindowsRewriteControl(data),
         inPlaceRewrite: false,
-        recoverWebglAtlasAfterParse: false
+        recoverWebglOutputAfterParse: false
       }
     }
 
@@ -6448,17 +6451,17 @@ export function connectPanePty(
       }
       const renderRefreshDecision = foregroundOutput
         ? shouldForceForegroundRenderRefresh(data)
-        : { refresh: false, inPlaceRewrite: false, recoverWebglAtlasAfterParse: false }
+        : { refresh: false, inPlaceRewrite: false, recoverWebglOutputAfterParse: false }
       if (!foregroundOutput) {
         // Advance hidden rewrite state; reveal owns atlas recovery.
         void hiddenOutputNeedsAtlasRecoveryAfterParse(data)
       }
-      const recoverWebglAtlasAfterParse =
-        foreground && renderRefreshDecision.recoverWebglAtlasAfterParse
-      // Why: atlas recovery must repaint from the parsed xterm buffer, not a pre-write snapshot a late TUI redraw can stale.
-      const onParsedAtlasRecovery = foreground
-        ? recoverWebglAtlasAfterParse
-          ? scheduleTerminalWebglAtlasRecovery
+      const recoverWebglOutputAfterParse =
+        foreground && renderRefreshDecision.recoverWebglOutputAfterParse
+      // Why: output recovery must repaint from the parsed xterm buffer, not a pre-write snapshot a late TUI redraw can stale.
+      const onParsedOutputRecovery = foreground
+        ? recoverWebglOutputAfterParse
+          ? terminalWebglOutputRecovery.schedule
           : renderRefreshDecision.inPlaceRewrite
             ? alternateScreenRewriteAtlasRecoveryOnParsed()
             : undefined
@@ -6501,7 +6504,7 @@ export function connectPanePty(
           nativeWindowsCursorRestore || nativeWindowsInPlaceRewriteFollowup,
         // Why: xterm already queued a WebGL frame parsing this chunk; merge the repair into it instead of rendering the grid twice.
         shouldRefreshForegroundSynchronously,
-        onParsed: onParsedAtlasRecovery,
+        onParsed: onParsedOutputRecovery,
         stripTransientCursorShows: shouldProtectNativeWindowsSynchronizedOutput && foreground,
         coalesceForeground: synchronizedForegroundOutput && synchronizedOutputEnded,
         holdForeground: synchronizedForegroundOutput && nextSynchronizedForegroundOutputActive
@@ -9303,6 +9306,7 @@ export function connectPanePty(
     reconcileIfSessionMissing,
     dispose() {
       disposed = true
+      terminalWebglOutputRecovery.dispose()
       // Why: a detached client stops observing the pane's bytes, so it must cede
       // agent-status authority back to the host on the next mirrored snapshot.
       releaseRendererOwnedAgentStatusPane?.()

@@ -334,7 +334,14 @@ type MockTransport = {
 
 const scheduleRuntimeGraphSync = vi.fn()
 const shouldSeedCacheTimerOnInitialTitle = vi.fn(() => false)
-const scheduleTerminalWebglAtlasRecovery = vi.fn()
+const scheduleTerminalWebglOutputRecovery = vi.fn()
+const disposeTerminalWebglOutputRecovery = vi.fn()
+const createTerminalWebglOutputRecovery = vi.fn<
+  (recover: () => void) => { schedule: () => void; dispose: () => void }
+>(() => ({
+  schedule: scheduleTerminalWebglOutputRecovery,
+  dispose: disposeTerminalWebglOutputRecovery
+}))
 
 let mockStoreState: StoreState
 let transportFactoryQueue: MockTransport[] = []
@@ -358,7 +365,7 @@ vi.mock('@/store', () => ({
 }))
 
 vi.mock('./terminal-webgl-atlas-recovery', () => ({
-  scheduleTerminalWebglAtlasRecovery
+  createTerminalWebglOutputRecovery
 }))
 
 function notifyStoreSubscribers(): void {
@@ -581,6 +588,7 @@ function createManager(paneCount = 1, initialActivePaneId: number | null = null)
     setPaneGpuRendering: vi.fn(),
     markPaneHasComplexScriptOutput: vi.fn(),
     rebuildPaneWebgl: vi.fn(),
+    schedulePaneRepaint: vi.fn(),
     hasWebglRenderer: vi.fn(() => false),
     getPanes: vi.fn(() => panes),
     closePane: vi.fn(),
@@ -12475,11 +12483,11 @@ describe('connectPanePty', () => {
       vi.advanceTimersByTime(50)
 
       expect(writes).toEqual([`${startChunk}${plainRowChunk}${endChunk}`])
-      expect(scheduleTerminalWebglAtlasRecovery).not.toHaveBeenCalled()
+      expect(scheduleTerminalWebglOutputRecovery).not.toHaveBeenCalled()
 
       parseCallbacks[0]?.()
 
-      expect(scheduleTerminalWebglAtlasRecovery).not.toHaveBeenCalled()
+      expect(scheduleTerminalWebglOutputRecovery).not.toHaveBeenCalled()
     } finally {
       vi.useRealTimers()
     }
@@ -12517,11 +12525,11 @@ describe('connectPanePty', () => {
       vi.advanceTimersByTime(50)
 
       expect(writes.join('')).toBe('\x1b[?2026hbody row\r\ntail\x1b[?2026l')
-      expect(scheduleTerminalWebglAtlasRecovery).not.toHaveBeenCalled()
+      expect(scheduleTerminalWebglOutputRecovery).not.toHaveBeenCalled()
 
       parseCallbacks[0]?.()
 
-      expect(scheduleTerminalWebglAtlasRecovery).not.toHaveBeenCalled()
+      expect(scheduleTerminalWebglOutputRecovery).not.toHaveBeenCalled()
     } finally {
       vi.useRealTimers()
     }
@@ -12560,7 +12568,7 @@ describe('connectPanePty', () => {
         callback()
       }
 
-      expect(scheduleTerminalWebglAtlasRecovery).not.toHaveBeenCalled()
+      expect(scheduleTerminalWebglOutputRecovery).not.toHaveBeenCalled()
     } finally {
       vi.useRealTimers()
     }
@@ -12593,11 +12601,11 @@ describe('connectPanePty', () => {
       capturedDataCallback.current?.('\x1b[2J\x1b[Hredrawn hidden table\x1b[K')
 
       vi.advanceTimersByTime(50)
-      expect(scheduleTerminalWebglAtlasRecovery).not.toHaveBeenCalled()
+      expect(scheduleTerminalWebglOutputRecovery).not.toHaveBeenCalled()
 
       parseCallbacks[0]?.()
 
-      expect(scheduleTerminalWebglAtlasRecovery).not.toHaveBeenCalled()
+      expect(scheduleTerminalWebglOutputRecovery).not.toHaveBeenCalled()
     } finally {
       vi.useRealTimers()
     }
@@ -12631,20 +12639,20 @@ describe('connectPanePty', () => {
       vi.advanceTimersByTime(50)
       expect(writes).toEqual(['prompt rewrite\r'])
       parseCallbacks.shift()?.()
-      expect(scheduleTerminalWebglAtlasRecovery).not.toHaveBeenCalled()
+      expect(scheduleTerminalWebglOutputRecovery).not.toHaveBeenCalled()
 
       capturedDataCallback.current?.('\x1b[?2026hredraw frame\x1b[?2026l')
       vi.advanceTimersByTime(50)
       expect(writes).toEqual(['prompt rewrite\r', '\x1b[?2026hredraw frame\x1b[?2026l'])
       parseCallbacks.shift()?.()
-      expect(scheduleTerminalWebglAtlasRecovery).not.toHaveBeenCalled()
-      scheduleTerminalWebglAtlasRecovery.mockClear()
+      expect(scheduleTerminalWebglOutputRecovery).not.toHaveBeenCalled()
+      scheduleTerminalWebglOutputRecovery.mockClear()
 
       capturedDataCallback.current?.('plain after frame')
       vi.advanceTimersByTime(50)
       parseCallbacks.shift()?.()
 
-      expect(scheduleTerminalWebglAtlasRecovery).not.toHaveBeenCalled()
+      expect(scheduleTerminalWebglOutputRecovery).not.toHaveBeenCalled()
     } finally {
       vi.useRealTimers()
     }
@@ -12680,8 +12688,8 @@ describe('connectPanePty', () => {
       capturedDataCallback.current?.('\x1b[?2026h')
       vi.advanceTimersByTime(50)
       parseCallbacks.shift()?.()
-      expect(scheduleTerminalWebglAtlasRecovery).not.toHaveBeenCalled()
-      scheduleTerminalWebglAtlasRecovery.mockClear()
+      expect(scheduleTerminalWebglOutputRecovery).not.toHaveBeenCalled()
+      scheduleTerminalWebglOutputRecovery.mockClear()
       writes.length = 0
 
       isVisibleRef.current = true
@@ -12696,7 +12704,7 @@ describe('connectPanePty', () => {
       parseCallbacks.shift()?.()
 
       expect(writes).toEqual(['plain after skipped close\r\n'])
-      expect(scheduleTerminalWebglAtlasRecovery).not.toHaveBeenCalled()
+      expect(scheduleTerminalWebglOutputRecovery).not.toHaveBeenCalled()
     } finally {
       vi.useRealTimers()
     }
@@ -16894,7 +16902,7 @@ describe('connectPanePty', () => {
 
     expect(manager.markPaneHasComplexScriptOutput).not.toHaveBeenCalled()
     expect(refresh).toHaveBeenCalledWith(0, 39, true)
-    expect(scheduleTerminalWebglAtlasRecovery).toHaveBeenCalledTimes(1)
+    expect(scheduleTerminalWebglOutputRecovery).toHaveBeenCalledTimes(1)
   })
 
   it('forces a viewport refresh for foreground CJK output without CSI', async () => {
@@ -16923,10 +16931,10 @@ describe('connectPanePty', () => {
     capturedDataCallback.current?.('没改什么(护城河)\r\n')
 
     expect(refresh).toHaveBeenCalledWith(0, 39, true)
-    expect(scheduleTerminalWebglAtlasRecovery).toHaveBeenCalledTimes(1)
+    expect(scheduleTerminalWebglOutputRecovery).toHaveBeenCalledTimes(1)
   })
 
-  it('schedules WebGL atlas recovery after renderer-risk foreground output parses', async () => {
+  it('schedules pane-scoped WebGL output recovery after renderer-risk output parses', async () => {
     const { connectPanePty } = await import('./pty-connection')
     const transport = createMockTransport()
     const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
@@ -16947,16 +16955,27 @@ describe('connectPanePty', () => {
       parseCallback = callback
     })
 
-    connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+    const manager = createManager(1)
+    const binding = connectPanePty(pane as never, manager as never, createDeps() as never)
     await flushAsyncTicks(6)
 
     capturedDataCallback.current?.('没改什么(护城河)\r\n')
 
-    expect(scheduleTerminalWebglAtlasRecovery).not.toHaveBeenCalled()
+    expect(scheduleTerminalWebglOutputRecovery).not.toHaveBeenCalled()
     expect(refresh).not.toHaveBeenCalled()
     parseCallback?.()
     expect(refresh).toHaveBeenCalledWith(0, 39, true)
-    expect(scheduleTerminalWebglAtlasRecovery).toHaveBeenCalledTimes(1)
+    expect(scheduleTerminalWebglOutputRecovery).toHaveBeenCalledTimes(1)
+    const recoverVisibleManager = createTerminalWebglOutputRecovery.mock.calls[0]?.[0]
+    expect(recoverVisibleManager).toEqual(expect.any(Function))
+    recoverVisibleManager?.()
+    expect(manager.schedulePaneRepaint).toHaveBeenCalledOnce()
+    expect(manager.schedulePaneRepaint).toHaveBeenCalledWith(pane.id, expect.any(Function))
+    const ownsRecovery = manager.schedulePaneRepaint.mock.calls[0]?.[1]
+    expect(ownsRecovery?.()).toBe(true)
+    binding.dispose()
+    expect(ownsRecovery?.()).toBe(false)
+    expect(disposeTerminalWebglOutputRecovery).toHaveBeenCalledOnce()
   })
 
   it('schedules WebGL atlas recovery for Vim-style foreground alternate-screen redraws', async () => {
@@ -16992,10 +17011,10 @@ describe('connectPanePty', () => {
         '\x1b[2J\x1b[H{"name":"eepo"}\r\n\x1b[2;1H{"name":"expo"}\x1b[K'
       )
 
-      expect(scheduleTerminalWebglAtlasRecovery).not.toHaveBeenCalled()
+      expect(scheduleTerminalWebglOutputRecovery).not.toHaveBeenCalled()
       parseCallback?.()
       expect(refresh).toHaveBeenCalledWith(0, 39, true)
-      expect(scheduleTerminalWebglAtlasRecovery).toHaveBeenCalledTimes(1)
+      expect(scheduleTerminalWebglOutputRecovery).toHaveBeenCalledTimes(1)
     } finally {
       restoreNavigator()
     }
@@ -17031,12 +17050,12 @@ describe('connectPanePty', () => {
 
       capturedDataCallback.current?.('\x1b[?1049h\x1b[2J\x1b[HVim package.json')
 
-      expect(scheduleTerminalWebglAtlasRecovery).not.toHaveBeenCalled()
+      expect(scheduleTerminalWebglOutputRecovery).not.toHaveBeenCalled()
       // Why: xterm switches to the alternate buffer while parsing; the write callback observes the post-parse state.
       ;(pane.terminal.buffer.active as { type: 'normal' | 'alternate' }).type = 'alternate'
       parseCallback?.()
       expect(refresh).toHaveBeenCalledWith(0, 39, true)
-      expect(scheduleTerminalWebglAtlasRecovery).toHaveBeenCalledTimes(1)
+      expect(scheduleTerminalWebglOutputRecovery).toHaveBeenCalledTimes(1)
     } finally {
       restoreNavigator()
     }
@@ -17073,12 +17092,12 @@ describe('connectPanePty', () => {
       // Why: PTY reads split CSI sequences at arbitrary byte boundaries, so the enter sequence can straddle two onData chunks.
       capturedDataCallback.current?.('\x1b[?104')
       parseCallback?.()
-      expect(scheduleTerminalWebglAtlasRecovery).not.toHaveBeenCalled()
+      expect(scheduleTerminalWebglOutputRecovery).not.toHaveBeenCalled()
 
       capturedDataCallback.current?.('9h\x1b[2J\x1b[H~\x1b[K')
       ;(pane.terminal.buffer.active as { type: 'normal' | 'alternate' }).type = 'alternate'
       parseCallback?.()
-      expect(scheduleTerminalWebglAtlasRecovery).toHaveBeenCalledTimes(1)
+      expect(scheduleTerminalWebglOutputRecovery).toHaveBeenCalledTimes(1)
     } finally {
       restoreNavigator()
     }
@@ -17117,7 +17136,7 @@ describe('connectPanePty', () => {
       capturedDataCallback.current?.('\x1b[34;1H\x1b[K\x1b[34;1H\x1b[?1049l\x1b[?25h')
       ;(pane.terminal.buffer.active as { type: 'normal' | 'alternate' }).type = 'normal'
       parseCallback?.()
-      expect(scheduleTerminalWebglAtlasRecovery).toHaveBeenCalledTimes(1)
+      expect(scheduleTerminalWebglOutputRecovery).toHaveBeenCalledTimes(1)
     } finally {
       restoreNavigator()
     }
@@ -17165,7 +17184,7 @@ describe('connectPanePty', () => {
       bufferChangeListener?.()
       bufferChangeListener?.()
       parseCallback?.()
-      expect(scheduleTerminalWebglAtlasRecovery).toHaveBeenCalledTimes(1)
+      expect(scheduleTerminalWebglOutputRecovery).toHaveBeenCalledTimes(1)
     } finally {
       restoreNavigator()
     }
@@ -17203,13 +17222,13 @@ describe('connectPanePty', () => {
       // Captured from a real vim session: a 1024-byte PTY read boundary cuts the cursor move \x1b[30;5H into "\x1b[30" + ";5H".
       capturedDataCallback.current?.('"rules": {\x1b[29;15H\x1b[K\x1b[30')
       parseCallback?.()
-      expect(scheduleTerminalWebglAtlasRecovery).toHaveBeenCalledTimes(1)
+      expect(scheduleTerminalWebglOutputRecovery).toHaveBeenCalledTimes(1)
 
       capturedDataCallback.current?.(
         ';5H  "js-combine-iterations": "off"\r\n    }\x1b[31;6H\x1b[K\x1b[33;1H\x1b[?25h'
       )
       parseCallback?.()
-      expect(scheduleTerminalWebglAtlasRecovery).toHaveBeenCalledTimes(2)
+      expect(scheduleTerminalWebglOutputRecovery).toHaveBeenCalledTimes(2)
     } finally {
       restoreNavigator()
     }
@@ -17247,7 +17266,7 @@ describe('connectPanePty', () => {
 
       parseCallback?.()
       expect(refresh).toHaveBeenCalledWith(0, 39, true)
-      expect(scheduleTerminalWebglAtlasRecovery).not.toHaveBeenCalled()
+      expect(scheduleTerminalWebglOutputRecovery).not.toHaveBeenCalled()
     } finally {
       restoreNavigator()
     }
@@ -17278,9 +17297,9 @@ describe('connectPanePty', () => {
 
       capturedDataCallback.current?.('\x1b[?2026hplain claude frame\x1b[?2026l')
 
-      expect(scheduleTerminalWebglAtlasRecovery).not.toHaveBeenCalled()
+      expect(scheduleTerminalWebglOutputRecovery).not.toHaveBeenCalled()
       parseCallback?.()
-      expect(scheduleTerminalWebglAtlasRecovery).not.toHaveBeenCalled()
+      expect(scheduleTerminalWebglOutputRecovery).not.toHaveBeenCalled()
     } finally {
       restoreNavigator()
     }
@@ -17317,7 +17336,7 @@ describe('connectPanePty', () => {
 
     expect(manager.markPaneHasComplexScriptOutput).not.toHaveBeenCalled()
     expect(refresh).toHaveBeenCalledWith(0, 39, true)
-    expect(scheduleTerminalWebglAtlasRecovery).toHaveBeenCalledTimes(1)
+    expect(scheduleTerminalWebglOutputRecovery).toHaveBeenCalledTimes(1)
   })
 
   it('forces a viewport refresh when the foreground CSI introducer is split across PTY chunks', async () => {
@@ -17351,7 +17370,7 @@ describe('connectPanePty', () => {
 
     expect(manager.markPaneHasComplexScriptOutput).not.toHaveBeenCalled()
     expect(refresh).toHaveBeenCalledWith(0, 39, true)
-    expect(scheduleTerminalWebglAtlasRecovery).toHaveBeenCalledTimes(1)
+    expect(scheduleTerminalWebglOutputRecovery).toHaveBeenCalledTimes(1)
   })
 
   it('does not keep forcing viewport refresh after completed background redraws', async () => {
@@ -17381,11 +17400,11 @@ describe('connectPanePty', () => {
     expect(refresh).toHaveBeenCalledWith(0, 39, true)
 
     refresh.mockClear()
-    scheduleTerminalWebglAtlasRecovery.mockClear()
+    scheduleTerminalWebglOutputRecovery.mockClear()
     capturedDataCallback.current?.('plain follow-up output\r\n')
 
     expect(refresh).not.toHaveBeenCalled()
-    expect(scheduleTerminalWebglAtlasRecovery).not.toHaveBeenCalled()
+    expect(scheduleTerminalWebglOutputRecovery).not.toHaveBeenCalled()
   })
 
   it('forces a viewport refresh for native Windows CJK foreground output after terminal input', async () => {
@@ -17496,7 +17515,7 @@ describe('connectPanePty', () => {
       capturedDataCallback.current?.('abc 123 ✓')
 
       expect(refresh).not.toHaveBeenCalled()
-      expect(scheduleTerminalWebglAtlasRecovery).not.toHaveBeenCalled()
+      expect(scheduleTerminalWebglOutputRecovery).not.toHaveBeenCalled()
     } finally {
       restoreNavigator()
     }
@@ -17575,7 +17594,7 @@ describe('connectPanePty', () => {
       capturedDataCallback.current?.('abc 123 ✓')
 
       expect(refresh).not.toHaveBeenCalled()
-      expect(scheduleTerminalWebglAtlasRecovery).not.toHaveBeenCalled()
+      expect(scheduleTerminalWebglOutputRecovery).not.toHaveBeenCalled()
     } finally {
       restoreNavigator()
     }

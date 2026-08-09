@@ -85,7 +85,10 @@ type MockTransport = {
 
 const scheduleRuntimeGraphSync = vi.fn()
 const shouldSeedCacheTimerOnInitialTitle = vi.fn(() => false)
-const scheduleTerminalWebglAtlasRecovery = vi.fn()
+const createTerminalWebglOutputRecovery = vi.fn(() => ({
+  schedule: vi.fn(),
+  dispose: vi.fn()
+}))
 const toastInfo = vi.fn()
 const notifyCodexPaneBoundForStaleSweep = vi.fn()
 
@@ -111,7 +114,7 @@ vi.mock('@/store', () => ({
 }))
 
 vi.mock('./terminal-webgl-atlas-recovery', () => ({
-  scheduleTerminalWebglAtlasRecovery
+  createTerminalWebglOutputRecovery
 }))
 
 vi.mock('@/lib/agent-status', async (importOriginal) => {

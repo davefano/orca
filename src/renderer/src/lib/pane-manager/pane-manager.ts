@@ -382,6 +382,18 @@ export class PaneManager {
     schedulePaneRevealRepaint(() => (this.isVisibleForAtlasRecovery() ? this.panes.values() : []))
   }
 
+  schedulePaneRepaint(paneId: number, isCurrentOwner: () => boolean): void {
+    // Why: output recovery belongs to the pane that produced the risky frame;
+    // repainting every split multiplies work and can disturb unrelated panes.
+    schedulePaneRevealRepaint(() => {
+      if (!isCurrentOwner() || !this.isVisibleForAtlasRecovery()) {
+        return []
+      }
+      const pane = this.panes.get(paneId)
+      return pane ? [pane] : []
+    })
+  }
+
   scheduleRevealPresent(): void {
     // Why: same destroy guard as scheduleRevealRepaint, but presents without
     // clearing the shared glyph atlas — used by the plain-refocus recovery.

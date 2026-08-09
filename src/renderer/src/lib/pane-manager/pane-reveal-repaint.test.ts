@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import type { ManagedPaneInternal } from './pane-manager-types'
+import { PaneManager } from './pane-manager'
 import { schedulePaneRevealPresent, schedulePaneRevealRepaint } from './pane-reveal-repaint'
 import { registerLivePaneManager, unregisterLivePaneManager } from './pane-manager-registry'
 import { resetTerminalWebglSuggestion, resetWebglTextureAtlas } from './pane-webgl-renderer'
@@ -16,11 +17,15 @@ type FakePaneManager = {
 }
 
 function createPane(
-  options: { webglAddon?: FakeWebglAddon | null; renderService?: FakeRenderService } = {}
+  options: {
+    id?: number
+    webglAddon?: FakeWebglAddon | null
+    renderService?: FakeRenderService
+  } = {}
 ): ManagedPaneInternal {
   const leafId = '33333333-3333-4333-8333-333333333333' as never
   return {
-    id: 1,
+    id: options.id ?? 1,
     leafId,
     stablePaneId: leafId,
     terminal: {
@@ -156,6 +161,56 @@ describe('schedulePaneRevealRepaint', () => {
     expect(secondManager.resetWebglTextureAtlases).not.toHaveBeenCalled()
     expect(firstPane.terminal.refresh).toHaveBeenCalledTimes(1)
     expect(secondPane.terminal.refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('repaints only the requested pane while its binding still owns it', () => {
+    const firstPane = createPane({ id: 1 })
+    const requestedPane = createPane({ id: 2 })
+    const manager = Object.assign(Object.create(PaneManager.prototype), {
+      panes: new Map([
+        [firstPane.id, firstPane],
+        [requestedPane.id, requestedPane]
+      ]),
+      atlasRecoveryVisible: true,
+      destroyed: false
+    }) as PaneManager
+
+    manager.schedulePaneRepaint(requestedPane.id, () => true)
+    flushFrame()
+    flushFrame()
+
+    expect(firstPane.terminal.refresh).not.toHaveBeenCalled()
+    expect(requestedPane.terminal.refresh).toHaveBeenCalledWith(0, 23)
+  })
+
+  it('drops a queued pane repaint when ownership or pane visibility changes', () => {
+    const pane = createPane()
+    let ownsPane = true
+    const manager = Object.assign(Object.create(PaneManager.prototype), {
+      panes: new Map([[pane.id, pane]]),
+      atlasRecoveryVisible: true,
+      destroyed: false
+    }) as PaneManager
+
+    manager.schedulePaneRepaint(pane.id, () => ownsPane)
+    ownsPane = false
+    flushFrame()
+    flushFrame()
+    expect(pane.terminal.refresh).not.toHaveBeenCalled()
+
+    ownsPane = true
+    manager.schedulePaneRepaint(pane.id, () => ownsPane)
+    manager.setAtlasRecoveryVisible(false)
+    flushFrame()
+    flushFrame()
+    expect(pane.terminal.refresh).not.toHaveBeenCalled()
+
+    manager.setAtlasRecoveryVisible(true)
+    manager.schedulePaneRepaint(pane.id, () => ownsPane)
+    ;(manager as unknown as { panes: Map<number, ManagedPaneInternal> }).panes.delete(pane.id)
+    flushFrame()
+    flushFrame()
+    expect(pane.terminal.refresh).not.toHaveBeenCalled()
   })
 
   it('reattaches a missing WebGL addon before repainting', () => {
