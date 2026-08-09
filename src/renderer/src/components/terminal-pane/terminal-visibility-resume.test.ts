@@ -21,12 +21,6 @@ vi.mock('./pane-helpers', () => ({
   fitPanes: vi.fn(),
   focusActivePane: vi.fn()
 }))
-const scheduleTabRevealWebglAtlasRecovery = vi.fn()
-vi.mock('./terminal-webgl-atlas-recovery', () => ({
-  // Why: the light-tab reveal must recover the atlas immediately, decoupled from
-  // the terminal-output debounce (which a background stream could otherwise defer).
-  scheduleTabRevealWebglAtlasRecovery: () => scheduleTabRevealWebglAtlasRecovery()
-}))
 const resetTerminalLinkifierHoverState = vi.fn()
 const isTerminalLinkifierHoverActive = vi.fn((_terminal: unknown) => false)
 vi.mock('@/lib/pane-manager/terminal-linkifier-hover-reset', () => ({
@@ -72,7 +66,7 @@ describe('resumeTerminalVisibility reveal repaint', () => {
     vi.clearAllMocks()
   })
 
-  it('schedules a pane-scoped repaint on a light tab reveal', () => {
+  it('schedules a pane-scoped repaint on a light tab reveal', async () => {
     // The light path is the "click the tab that was not open" gesture: it has
     // no rendering resume or fit, so without this repaint a hidden-while-
     // working pane keeps compositing pre-hide pixels.
@@ -81,9 +75,10 @@ describe('resumeTerminalVisibility reveal repaint', () => {
 
     expect(manager.scheduleRevealRepaint).toHaveBeenCalledTimes(1)
     expect(manager.resumeRendering).not.toHaveBeenCalled()
-    // Reveal recovery is immediate (not the terminal-output debounce), so a
-    // background stream in another pane cannot defer this tab's atlas rebuild.
-    expect(scheduleTabRevealWebglAtlasRecovery).toHaveBeenCalledTimes(1)
+    const { resetAndRefreshAllTerminalWebglAtlases } = vi.mocked(
+      await import('@/lib/pane-manager/pane-manager-registry')
+    )
+    expect(resetAndRefreshAllTerminalWebglAtlases).not.toHaveBeenCalled()
   })
 
   it('captures native trim movement before enforcing viewport intent', async () => {
@@ -120,6 +115,18 @@ describe('resumeTerminalVisibility reveal repaint', () => {
     resumeTerminalVisibility(resumeArgs(manager, false))
 
     expect(order).toEqual(['resume-rendering', 'fit-reveal', 'reveal-repaint'])
+  })
+
+  it('preserves the shared glyph atlas on a heavy visibility reveal', async () => {
+    const { resetAndRefreshAllTerminalWebglAtlases } = vi.mocked(
+      await import('@/lib/pane-manager/pane-manager-registry')
+    )
+    const manager = createManager()
+
+    resumeTerminalVisibility(resumeArgs(manager, false))
+
+    expect(resetAndRefreshAllTerminalWebglAtlases).not.toHaveBeenCalled()
+    expect(manager.scheduleRevealRepaint).toHaveBeenCalledTimes(1)
   })
 
   it('routes a heavy reveal through fitAllRevealedPanes, not the sync fit', () => {
@@ -256,9 +263,8 @@ describe('resumeTerminalVisibility reveal repaint', () => {
     // Deliberate reversal of the #6354 focus-clear: wiping the shared atlas on
     // every refocus forces a mass re-rasterization that can hit xterm's atlas
     // page-merge race (#4480) and garble streaming panes. Focus recovery must
-    // resume rendering and present WITHOUT the atlas-clearing reveal repaint —
-    // scheduleRevealRepaint runs shared-atlas recovery, so the refocus path
-    // must route to the atlas-preserving present instead.
+    // resume rendering and use the simpler settled present; render-pause
+    // release is reserved for panes that were actually hidden.
     const { resetAndRefreshAllTerminalWebglAtlases } = vi.mocked(
       await import('@/lib/pane-manager/pane-manager-registry')
     )

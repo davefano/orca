@@ -5,12 +5,19 @@ import { registerLivePaneManager, unregisterLivePaneManager } from './pane-manag
 import { resetTerminalWebglSuggestion, resetWebglTextureAtlas } from './pane-webgl-renderer'
 
 type FakeWebglAddon = { clearTextureAtlas: ReturnType<typeof vi.fn> }
+type FakeRenderService = {
+  _isPaused: boolean
+  _needsFullRefresh: boolean
+  refreshRows: ReturnType<typeof vi.fn>
+}
 type FakePaneManager = {
   resetWebglTextureAtlases: Mock<() => void>
   refreshAllPanes: Mock<() => void>
 }
 
-function createPane(options: { webglAddon?: FakeWebglAddon | null } = {}): ManagedPaneInternal {
+function createPane(
+  options: { webglAddon?: FakeWebglAddon | null; renderService?: FakeRenderService } = {}
+): ManagedPaneInternal {
   const leafId = '33333333-3333-4333-8333-333333333333' as never
   return {
     id: 1,
@@ -20,7 +27,8 @@ function createPane(options: { webglAddon?: FakeWebglAddon | null } = {}): Manag
       cols: 80,
       rows: 24,
       refresh: vi.fn(),
-      loadAddon: vi.fn()
+      loadAddon: vi.fn(),
+      ...(options.renderService ? { _core: { _renderService: options.renderService } } : {})
     } as never,
     container: {} as never,
     xtermContainer: {} as never,
@@ -97,7 +105,7 @@ describe('schedulePaneRevealRepaint', () => {
     vi.restoreAllMocks()
   })
 
-  it('repaints only after the post-reveal frame has settled', () => {
+  it('repaints only after the post-reveal frame has settled without clearing the atlas', () => {
     const webglAddon = { clearTextureAtlas: vi.fn() }
     const pane = createPane({ webglAddon })
     registerPaneManager(() => [pane])
@@ -110,11 +118,11 @@ describe('schedulePaneRevealRepaint', () => {
     expect(pane.terminal.refresh).not.toHaveBeenCalled()
 
     flushFrame()
-    expect(webglAddon.clearTextureAtlas).toHaveBeenCalledTimes(1)
+    expect(webglAddon.clearTextureAtlas).not.toHaveBeenCalled()
     expect(pane.terminal.refresh).toHaveBeenCalledWith(0, 23)
   })
 
-  it('coordinates a settled atlas clear across recovery-eligible managers', () => {
+  it('keeps a pane reveal scoped to the revealed manager', () => {
     const pane = createPane({ webglAddon: { clearTextureAtlas: vi.fn() } })
     const siblingPane = createPane({ webglAddon: { clearTextureAtlas: vi.fn() } })
     const targetManager = registerPaneManager(() => [pane])
@@ -124,13 +132,16 @@ describe('schedulePaneRevealRepaint', () => {
     flushFrame()
     flushFrame()
 
-    expect(targetManager.resetWebglTextureAtlases).toHaveBeenCalledTimes(1)
-    expect(siblingManager.resetWebglTextureAtlases).toHaveBeenCalledTimes(1)
-    expect((siblingPane.webglAddon as never as FakeWebglAddon).clearTextureAtlas).toHaveBeenCalled()
-    expect(siblingPane.terminal.refresh).toHaveBeenCalledWith(0, 23)
+    expect(targetManager.resetWebglTextureAtlases).not.toHaveBeenCalled()
+    expect(siblingManager.resetWebglTextureAtlases).not.toHaveBeenCalled()
+    expect(
+      (siblingPane.webglAddon as never as FakeWebglAddon).clearTextureAtlas
+    ).not.toHaveBeenCalled()
+    expect(pane.terminal.refresh).toHaveBeenCalledWith(0, 23)
+    expect(siblingPane.terminal.refresh).not.toHaveBeenCalled()
   })
 
-  it('coalesces concurrent reveal clears into one global recovery', () => {
+  it('coalesces concurrent pane-scoped reveal repaints', () => {
     const firstPane = createPane({ webglAddon: { clearTextureAtlas: vi.fn() } })
     const secondPane = createPane({ webglAddon: { clearTextureAtlas: vi.fn() } })
     const firstManager = registerPaneManager(() => [firstPane])
@@ -141,8 +152,10 @@ describe('schedulePaneRevealRepaint', () => {
     flushFrame()
     flushFrame()
 
-    expect(firstManager.resetWebglTextureAtlases).toHaveBeenCalledTimes(1)
-    expect(secondManager.resetWebglTextureAtlases).toHaveBeenCalledTimes(1)
+    expect(firstManager.resetWebglTextureAtlases).not.toHaveBeenCalled()
+    expect(secondManager.resetWebglTextureAtlases).not.toHaveBeenCalled()
+    expect(firstPane.terminal.refresh).toHaveBeenCalledTimes(1)
+    expect(secondPane.terminal.refresh).toHaveBeenCalledTimes(1)
   })
 
   it('reattaches a missing WebGL addon before repainting', () => {
@@ -154,7 +167,7 @@ describe('schedulePaneRevealRepaint', () => {
     flushFrame()
 
     expect(pane.webglAddon).not.toBeNull()
-    expect(manager.resetWebglTextureAtlases).toHaveBeenCalledTimes(1)
+    expect(manager.resetWebglTextureAtlases).not.toHaveBeenCalled()
     expect(pane.terminal.refresh).toHaveBeenCalled()
   })
 
@@ -174,7 +187,9 @@ describe('schedulePaneRevealRepaint', () => {
     ).not.toHaveBeenCalled()
     expect(
       (livePane.webglAddon as never as FakeWebglAddon).clearTextureAtlas
-    ).toHaveBeenCalledTimes(1)
+    ).not.toHaveBeenCalled()
+    expect(stalePane.terminal.refresh).not.toHaveBeenCalled()
+    expect(livePane.terminal.refresh).toHaveBeenCalledWith(0, 23)
   })
 
   it('keeps repainting remaining panes when one pane throws', () => {
@@ -191,8 +206,47 @@ describe('schedulePaneRevealRepaint', () => {
     flushFrame()
     flushFrame()
 
-    expect(webglAddon.clearTextureAtlas).toHaveBeenCalledTimes(1)
+    expect(webglAddon.clearTextureAtlas).not.toHaveBeenCalled()
     expect(livePane.terminal.refresh).toHaveBeenCalled()
+  })
+
+  it('releases a revealed pane paused by xterm without clearing the atlas', () => {
+    const renderService: FakeRenderService = {
+      _isPaused: true,
+      _needsFullRefresh: true,
+      refreshRows: vi.fn()
+    }
+    const webglAddon = { clearTextureAtlas: vi.fn() }
+    const pane = createPane({ webglAddon, renderService })
+
+    schedulePaneRevealRepaint(() => [pane])
+    flushFrame()
+    flushFrame()
+
+    expect(renderService._isPaused).toBe(false)
+    expect(renderService._needsFullRefresh).toBe(false)
+    expect(renderService.refreshRows).toHaveBeenCalledWith(0, 23, true)
+    expect(pane.terminal.refresh).not.toHaveBeenCalled()
+    expect(webglAddon.clearTextureAtlas).not.toHaveBeenCalled()
+  })
+
+  it('drops a stale repaint when the pane is hidden again before the settled frame', () => {
+    const renderService: FakeRenderService = {
+      _isPaused: true,
+      _needsFullRefresh: true,
+      refreshRows: vi.fn()
+    }
+    const pane = createPane({ renderService })
+    let visible = true
+
+    schedulePaneRevealRepaint(() => (visible ? [pane] : []))
+    visible = false
+    flushFrame()
+    flushFrame()
+
+    expect(renderService._isPaused).toBe(true)
+    expect(renderService.refreshRows).not.toHaveBeenCalled()
+    expect(pane.terminal.refresh).not.toHaveBeenCalled()
   })
 
   it('falls back to a timeout when animation frames are unavailable', () => {
@@ -205,7 +259,8 @@ describe('schedulePaneRevealRepaint', () => {
     schedulePaneRevealRepaint(() => [pane])
     vi.runAllTimers()
 
-    expect(webglAddon.clearTextureAtlas).toHaveBeenCalledTimes(1)
+    expect(webglAddon.clearTextureAtlas).not.toHaveBeenCalled()
+    expect(pane.terminal.refresh).toHaveBeenCalledWith(0, 23)
     vi.useRealTimers()
   })
 

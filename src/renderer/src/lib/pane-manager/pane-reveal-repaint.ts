@@ -1,6 +1,6 @@
 import type { ManagedPaneInternal } from './pane-manager-types'
 import { reattachWebglIfNeeded } from './pane-webgl-reattach'
-import { resetAndRefreshAllTerminalWebglAtlases } from './pane-manager-registry'
+import { forceRepaintThroughRenderPause } from './terminal-render-pause-release'
 
 type PaneGetter = () => Iterable<ManagedPaneInternal>
 
@@ -54,12 +54,16 @@ function flushPaneRevealRepaints(): void {
   for (const pane of livePanes) {
     try {
       reattachWebglIfNeeded(pane)
+      // Why: xterm can still consider a newly revealed pane non-intersecting
+      // for one frame. Release that pane's paused-render gate and repaint its
+      // current buffer without clearing the module-global glyph atlas shared
+      // by unrelated terminals.
+      if (!forceRepaintThroughRenderPause(pane.terminal) && pane.terminal.rows > 0) {
+        pane.terminal.refresh(0, pane.terminal.rows - 1)
+      }
     } catch {
-      /* ignore — one pane's teardown must not block global recovery */
+      /* ignore — one pane's teardown must not block sibling repaint */
     }
-  }
-  if (livePanes.size > 0) {
-    resetAndRefreshAllTerminalWebglAtlases('settled-reveal')
   }
 }
 
@@ -70,9 +74,10 @@ function flushPaneRevealRepaints(): void {
  * per-cell model without ever presenting a frame. At reveal the model diff
  * reports those cells unchanged, so plain refreshes skip them and the canvas
  * keeps compositing pre-hide pixels until a selection or resize rebuilds the
- * model. Once layout settles, reattach every revealed renderer before one
- * registry-wide atlas reset so no delayed pane-local clear can invalidate a
- * sibling terminal's rebuilt model.
+ * model. Once layout settles, reattach and repaint only the revealed panes.
+ * Ordinary tab/worktree changes must preserve the shared glyph atlas: clearing
+ * it invalidates sibling renderers and causes repeated rasterization whenever
+ * the app returns to the foreground.
  */
 export function schedulePaneRevealRepaint(getPanes: () => Iterable<ManagedPaneInternal>): void {
   pendingRevealRepaints.add(getPanes)
@@ -84,14 +89,13 @@ export function schedulePaneRevealRepaint(getPanes: () => Iterable<ManagedPaneIn
 }
 
 /**
- * Presents already-visible panes without clearing the shared glyph atlas.
+ * Presents already-visible panes after layout settles.
  *
  * Why: a plain window refocus never hid its panes, so their WebGL model is
  * already current — a `refresh` re-presents the live buffer (covering a
- * compositor that dropped frames while occluded). Using the atlas-clearing
- * reveal repaint here would wipe the atlas shared by every same-config pane and
- * re-arm the mid-stream page-merge garble race (xterm.js issue 4480); this path
- * must stay texture-atlas-preserving.
+ * compositor that dropped frames while occluded). It does not need the reveal
+ * repaint's coalescing or paused-render release because these panes stayed
+ * visible.
  */
 export function schedulePaneRevealPresent(getPanes: () => Iterable<ManagedPaneInternal>): void {
   forEachPaneOnSettledFrame(getPanes, (pane) => {

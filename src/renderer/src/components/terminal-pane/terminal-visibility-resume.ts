@@ -14,7 +14,6 @@ import {
   resetTerminalLinkifierHoverState
 } from '@/lib/pane-manager/terminal-linkifier-hover-reset'
 import { focusActivePane } from './pane-helpers'
-import { scheduleTabRevealWebglAtlasRecovery } from './terminal-webgl-atlas-recovery'
 
 const VISIBLE_RESUME_FLUSH_CHARS = 256 * 1024
 const WINDOW_WAKE_FLUSH_CHARS = 64 * 1024
@@ -77,10 +76,6 @@ export function resumeTerminalVisibility({
       // overlay's delayed geometry fit. Still request hidden-output recovery:
       // agent TUIs can suppress hidden bytes until the pane is foregrounded.
       requestLightTabBacklogRecovery(manager)
-      // Why: reveal recovery must be immediate, not the terminal-output debounce
-      // — a background agent streaming in another pane must not defer this tab's
-      // atlas rebuild.
-      scheduleTabRevealWebglAtlasRecovery()
       if (isActive) {
         focusActivePane(manager)
       }
@@ -88,14 +83,10 @@ export function resumeTerminalVisibility({
       resumeTerminalVisibilityHeavy(manager, isActive)
     }
     enforceTerminalViewportIntents(manager)
-    if (!shouldUseLightTabResume) {
-      // Why: this clear wipes the glyph atlas shared with other same-config
-      // terminals; refresh after reset so rebuilt atlases repaint from xterm.
-      resetAndRefreshAllTerminalWebglAtlases('visibility-resume')
-    }
     // Why: the synchronous recovery above can fire before the revealed pane is
-    // attached and laid out. Follow up after layout with one shared-atlas-safe
-    // recovery covering every visible terminal manager.
+    // attached and laid out. Follow up after layout with a pane-scoped repaint.
+    // Ordinary visibility transitions must not clear xterm's shared WebGL
+    // atlas; that global reset can wedge scrolling and stall sibling terminals.
     manager.scheduleRevealRepaint()
   })
 }
@@ -171,9 +162,8 @@ export function recoverVisibleTerminalWindowWake({
     resetAndRefreshAllTerminalWebglAtlases('system-resume')
     manager.scheduleRevealRepaint()
   } else {
-    // Why: the reveal repaint runs a shared-atlas reset, so a plain refocus
-    // must use the atlas-preserving present instead — otherwise it re-arms the
-    // same mid-stream garble race.
+    // Why: a plain refocus never hid its panes, so it needs only a settled
+    // present; reserve render-pause release for panes that were actually hidden.
     manager.scheduleRevealPresent()
   }
 }

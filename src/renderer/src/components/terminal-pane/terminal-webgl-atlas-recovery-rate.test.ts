@@ -7,7 +7,6 @@ import { setTerminalWebglDiagnosticRecorder } from '../../../../shared/terminal-
 import {
   resetTerminalWebglAtlasRecoveryBudgetForTesting,
   scheduleImagePasteWebglAtlasRecovery,
-  scheduleTabRevealWebglAtlasRecovery,
   scheduleTerminalWebglAtlasRecovery,
   TERMINAL_OUTPUT_RECOVERY_QUIET_MS
 } from './terminal-webgl-atlas-recovery'
@@ -196,7 +195,7 @@ describe('terminal WebGL atlas recovery rate', () => {
     expect(manager.resetWebglTextureAtlases).toHaveBeenCalledTimes(2)
   })
 
-  it('keeps one-shot paste and reveal recovery outside the streaming budget', () => {
+  it('keeps one-shot paste recovery outside the streaming budget', () => {
     vi.useFakeTimers()
     vi.setSystemTime(0)
     useImmediateAnimationFrames()
@@ -208,11 +207,6 @@ describe('terminal WebGL atlas recovery rate', () => {
     vi.advanceTimersByTime(TERMINAL_OUTPUT_RECOVERY_QUIET_MS)
     manager.resetWebglTextureAtlases.mockClear()
 
-    scheduleTabRevealWebglAtlasRecovery()
-    vi.advanceTimersByTime(500)
-    expect(manager.resetWebglTextureAtlases).toHaveBeenCalledTimes(3)
-
-    manager.resetWebglTextureAtlases.mockClear()
     scheduleImagePasteWebglAtlasRecovery()
     vi.advanceTimersByTime(500)
     expect(manager.resetWebglTextureAtlases).toHaveBeenCalledTimes(3)

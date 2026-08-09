@@ -377,10 +377,9 @@ export class PaneManager {
   }
 
   scheduleRevealRepaint(): void {
-    // Why: the settled-frame callback can fire after destroy(); repainting
-    // disposed panes could throw in attach and latch the global WebGL
-    // attach backoff, downgrading unrelated new panes to the DOM renderer.
-    schedulePaneRevealRepaint(() => (this.destroyed ? [] : this.panes.values()))
+    // Why: the settled callback may run after this manager is hidden again;
+    // never unpause or repaint panes that a newer navigation just suspended.
+    schedulePaneRevealRepaint(() => (this.isVisibleForAtlasRecovery() ? this.panes.values() : []))
   }
 
   scheduleRevealPresent(): void {

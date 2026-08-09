@@ -15,16 +15,16 @@ import { compareTerminalScreenshots } from './terminal-screenshot-diff'
  * bug (PR #7614). The mechanism is xterm's RenderService gating refreshRows() on
  * its IntersectionObserver: while `_isPaused` is true (the observer can lag a
  * frame behind a just-revealed pane, worse under load), refresh() early-returns
- * and only latches `_needsFullRefresh`. The reveal-repaint's terminal.refresh()
- * is then swallowed and the freshly-cleared render model never repaints.
+ * and only latches `_needsFullRefresh`. A plain terminal.refresh() is then
+ * swallowed and the visible model never repaints.
  *
- * This spec drives the REAL production reveal path (manager.resetWebglTextureAtlases
- * -> resetWebglTextureAtlas -> forceRepaintThroughRenderPause) against a real
- * xterm Terminal + RenderService. It:
+ * This spec drives the real pane-scoped reveal path against a real xterm
+ * Terminal + RenderService. It:
  *   1. proves the bug: while paused, a plain refresh() renders nothing;
  *   2. proves the fix: the real reveal repaint forces a full-viewport render
  *      through the paused gate and clears the pause latch;
- *   3. confirms recovery at the pixel level.
+ *   3. proves ordinary reveal preserves the shared glyph atlas;
+ *   4. confirms recovery at the pixel level.
  *
  * The paused state is set deterministically rather than raced, because headless
  * Electron does not reliably reproduce the observer-lag timing (documented for
@@ -37,12 +37,13 @@ type RenderProbeResult = {
   paused: boolean
   renderedRanges: [number, number][]
   rows: number
+  atlasClearCount: number
 }
 
 type RevealRenderDebug = {
   installProbe: () => boolean
   setPaused: (paused: boolean) => boolean
-  dirtyModelLikeReveal: () => boolean
+  simulateLegacyAtlasClear: () => boolean
   plainRefresh: () => void
   runRealRevealRepaint: () => void
   read: () => RenderProbeResult
@@ -86,6 +87,20 @@ async function installRevealRenderProbe(page: Page, tabId: string): Promise<void
       throw new Error('Real RenderService._renderRows unavailable — cannot probe')
     }
 
+    let atlasClearCount = 0
+    const withAtlas = pane as unknown as {
+      webglAddon?: { clearTextureAtlas?: () => void }
+    }
+    const originalClearTextureAtlas = withAtlas.webglAddon?.clearTextureAtlas?.bind(
+      withAtlas.webglAddon
+    )
+    if (withAtlas.webglAddon && originalClearTextureAtlas) {
+      withAtlas.webglAddon.clearTextureAtlas = () => {
+        atlasClearCount += 1
+        originalClearTextureAtlas()
+      }
+    }
+
     const debug: RevealRenderDebug = {
       installProbe: () => {
         if (service.__revealProbeInstalled) {
@@ -105,13 +120,9 @@ async function installRevealRenderProbe(page: Page, tabId: string): Promise<void
         service._isPaused = paused
         return service._isPaused === paused
       },
-      dirtyModelLikeReveal: () => {
-        // Why: reveal clears the WebGL render model so a full rebuild is forced.
-        // clearTextureAtlas() routes through RenderService and, crucially, also
-        // requests a redraw — which is exactly what the paused gate then eats.
-        const withAtlas = pane as unknown as {
-          webglAddon?: { clearTextureAtlas?: () => void }
-        }
+      simulateLegacyAtlasClear: () => {
+        // Why: the pre-fix reveal path cleared the atlas and requested a redraw
+        // through RenderService, which is exactly what the paused gate then ate.
         withAtlas.webglAddon?.clearTextureAtlas?.()
         return true
       },
@@ -120,13 +131,13 @@ async function installRevealRenderProbe(page: Page, tabId: string): Promise<void
         terminal.refresh?.(0, Math.max(0, rows - 1))
       },
       runRealRevealRepaint: () => {
-        // The real production reveal path — contains the fix under test.
-        manager.resetWebglTextureAtlases()
+        manager.scheduleRevealRepaint()
       },
       read: () => ({
         paused: service._isPaused === true,
         renderedRanges: (service.__revealProbeRanges ?? []).slice(),
-        rows: terminal.rows ?? 0
+        rows: terminal.rows ?? 0,
+        atlasClearCount
       })
     }
 
@@ -149,7 +160,7 @@ async function probeCall(
   method:
     | 'installProbe'
     | 'setPaused'
-    | 'dirtyModelLikeReveal'
+    | 'simulateLegacyAtlasClear'
     | 'plainRefresh'
     | 'runRealRevealRepaint',
   paused?: boolean
@@ -219,7 +230,7 @@ test.describe('terminal reveal paused-render recovery', () => {
     // is byte-for-byte the PRE-FIX resetWebglTextureAtlas on origin/main, so it
     // faithfully replays the old reveal path. While paused, it renders nothing.
     await probeCall(page, 'setPaused', true)
-    await probeCall(page, 'dirtyModelLikeReveal')
+    await probeCall(page, 'simulateLegacyAtlasClear')
     await probeCall(page, 'plainRefresh')
     // Give any (non-existent) queued render a frame to land.
     await page.waitForTimeout(80)
@@ -233,7 +244,8 @@ test.describe('terminal reveal paused-render recovery', () => {
 
     // ---- Fix: the real reveal repaint must force a full render through the gate.
     await probeCall(page, 'setPaused', true)
-    await probeCall(page, 'dirtyModelLikeReveal')
+    await probeCall(page, 'simulateLegacyAtlasClear')
+    const atlasClearsBeforeReveal = (await probeRead(page)).atlasClearCount
     await probeCall(page, 'runRealRevealRepaint')
     await page.waitForTimeout(80)
     const afterRealReveal = await probeRead(page)
@@ -255,6 +267,10 @@ test.describe('terminal reveal paused-render recovery', () => {
       afterRealReveal.paused,
       'FIX: pause latch is cleared so the observer can reassert authority cleanly'
     ).toBe(false)
+    expect(
+      afterRealReveal.atlasClearCount,
+      'FIX: ordinary reveal repaint preserves the shared glyph atlas'
+    ).toBe(atlasClearsBeforeReveal)
 
     // ---- Pixel-level confirmation: the surface still shows the correct content
     // after being driven through the paused gate (no stale/blank bottom rows).
