@@ -1,25 +1,41 @@
 #!/usr/bin/env node
 
-const required = [
-  'APPLE_ID',
-  'APPLE_APP_SPECIFIC_PASSWORD',
-  'APPLE_TEAM_ID',
-  'CSC_LINK',
-  'CSC_KEY_PASSWORD'
+const hasValue = (key) => {
+  const value = process.env[key]
+  return typeof value === 'string' && value.trim().length > 0
+}
+
+const credentialGroups = [
+  {
+    label: 'code signing',
+    alternatives: [['CSC_LINK', 'CSC_KEY_PASSWORD'], ['CSC_NAME']]
+  },
+  {
+    label: 'notarization',
+    alternatives: [
+      ['APPLE_ID', 'APPLE_APP_SPECIFIC_PASSWORD', 'APPLE_TEAM_ID'],
+      ['APPLE_KEYCHAIN', 'APPLE_KEYCHAIN_PROFILE'],
+      ['APPLE_API_KEY', 'APPLE_API_KEY_ID', 'APPLE_API_ISSUER']
+    ]
+  }
 ]
 
-const missing = required.filter((key) => {
-  const value = process.env[key]
-  return typeof value !== 'string' || value.trim().length === 0
-})
+const missingGroups = credentialGroups.filter(({ alternatives }) =>
+  alternatives.every((keys) => keys.some((key) => !hasValue(key)))
+)
 
-if (missing.length > 0) {
+if (missingGroups.length > 0) {
   // Why: local developers still need ad-hoc builds for validation, but the
   // production release path must fail fast instead of silently shipping an
-  // unsigned, unnotarized app that only looked successful in CI logs.
-  console.error('Missing required macOS release signing environment variables:')
-  for (const key of missing) {
-    console.error(`- ${key}`)
+  // unsigned, unnotarized app that only looked successful in CI logs. Local
+  // fleet builds may use an installed Developer ID identity and a validated
+  // notarytool Keychain profile so secrets never enter the environment.
+  console.error('Missing required macOS release credentials:')
+  for (const { label, alternatives } of missingGroups) {
+    console.error(`- ${label}: provide one of`)
+    for (const keys of alternatives) {
+      console.error(`  - ${keys.join(' + ')}`)
+    }
   }
   console.error('')
   console.error('Use `pnpm build:mac` for local ad-hoc builds, or provide the')
