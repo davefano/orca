@@ -5,6 +5,12 @@ import { schedulePaneRevealPresent, schedulePaneRevealRepaint } from './pane-rev
 import { registerLivePaneManager, unregisterLivePaneManager } from './pane-manager-registry'
 import { resetTerminalWebglSuggestion, resetWebglTextureAtlas } from './pane-webgl-renderer'
 
+const { fitRevealedPane } = vi.hoisted(() => ({
+  fitRevealedPane: vi.fn((_pane: ManagedPaneInternal, onSettled?: () => void) => onSettled?.())
+}))
+
+vi.mock('./pane-reveal-fit', () => ({ fitRevealedPane }))
+
 type FakeWebglAddon = { clearTextureAtlas: ReturnType<typeof vi.fn> }
 type FakeRenderService = {
   _isPaused: boolean
@@ -124,6 +130,24 @@ describe('schedulePaneRevealRepaint', () => {
 
     flushFrame()
     expect(webglAddon.clearTextureAtlas).not.toHaveBeenCalled()
+    expect(pane.terminal.refresh).toHaveBeenCalledWith(0, 23)
+  })
+
+  it('waits for a retained pane reveal fit to settle before repainting', () => {
+    let settleFit: (() => void) | undefined
+    fitRevealedPane.mockImplementationOnce((_pane, onSettled) => {
+      settleFit = onSettled
+    })
+    const pane = createPane()
+
+    schedulePaneRevealRepaint(() => [pane])
+    flushFrame()
+    flushFrame()
+
+    expect(fitRevealedPane).toHaveBeenCalledWith(pane, expect.any(Function))
+    expect(pane.terminal.refresh).not.toHaveBeenCalled()
+
+    settleFit?.()
     expect(pane.terminal.refresh).toHaveBeenCalledWith(0, 23)
   })
 

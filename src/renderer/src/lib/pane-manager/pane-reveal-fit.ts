@@ -37,16 +37,17 @@ function proposedGridMatchesTerminal(pane: ManagedPane): boolean {
   }
 }
 
-function releaseMeasurableFitContinuations(pane: ManagedPane): void {
+function releaseMeasurableFitContinuations(pane: ManagedPane): boolean {
   // Why: no reflow needed, but a pane that mounted hidden can have replay/reattach
   // continuations parked on a measurable fit — release them (and any parked scroll
   // restore, mirroring safeFit's equal-dims path) now it is visible.
   if (!canMeasurePaneForFit(pane)) {
-    return
+    return false
   }
   resumePendingFitScrollRestoreAfterFit(pane.terminal)
   flushPendingSafeFitContinuations(pane)
   clearPaneFitContinuationRetry(pane)
+  return true
 }
 
 // Reveal fit (minimize→restore, worktree foreground, window wake). resumeRendering
@@ -60,14 +61,22 @@ function releaseMeasurableFitContinuations(pane: ManagedPane): void {
 //    SSH-reattach, or a DPI change) → repair on a steady grid, so a sustained
 //    mismatch refits but a transient metric wobble does not reflow;
 //  - grid already correct → leave it alone.
-export function fitRevealedPane(pane: ManagedPane): void {
+export function fitRevealedPane(pane: ManagedPane, onSettled?: () => void): void {
   if (paneFitClientSizeChanged(pane)) {
-    safeFit(pane)
+    if (safeFit(pane)) {
+      onSettled?.()
+    } else {
+      requestStablePaneFit(pane, onSettled)
+    }
     return
   }
   if (!proposedGridMatchesTerminal(pane)) {
-    requestStablePaneFit(pane)
+    requestStablePaneFit(pane, onSettled)
     return
   }
-  releaseMeasurableFitContinuations(pane)
+  if (releaseMeasurableFitContinuations(pane)) {
+    onSettled?.()
+  } else {
+    requestStablePaneFit(pane, onSettled)
+  }
 }

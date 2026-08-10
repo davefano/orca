@@ -49,6 +49,7 @@ function createPane(options: {
 describe('fitRevealedPane routing', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.safeFit.mockReturnValue(true)
     mocks.canMeasurePaneForFit.mockReturnValue(true)
   })
 
@@ -117,6 +118,21 @@ describe('fitRevealedPane routing', () => {
     expect(mocks.flushPendingSafeFitContinuations).not.toHaveBeenCalled()
   })
 
+  it('settles reveal repaint only after an asynchronous stable fit', () => {
+    const pane = createPane({
+      lastFitClientSize: { width: 800, height: 600 },
+      currentSize: { width: 800, height: 600 },
+      terminal: { cols: 100, rows: 30 },
+      proposed: { cols: 80, rows: 24 }
+    })
+    const onSettled = vi.fn()
+
+    fitRevealedPane(pane, onSettled)
+
+    expect(mocks.requestStablePaneFit).toHaveBeenCalledWith(pane, onSettled)
+    expect(onSettled).not.toHaveBeenCalled()
+  })
+
   it('does not release continuations when an unchanged pane is unmeasurable', () => {
     mocks.canMeasurePaneForFit.mockReturnValue(false)
     const pane = createPane({
@@ -126,8 +142,11 @@ describe('fitRevealedPane routing', () => {
       proposed: { cols: 80, rows: 24 }
     })
 
-    fitRevealedPane(pane)
+    const onSettled = vi.fn()
+    fitRevealedPane(pane, onSettled)
 
     expect(mocks.flushPendingSafeFitContinuations).not.toHaveBeenCalled()
+    expect(mocks.requestStablePaneFit).toHaveBeenCalledWith(pane, onSettled)
+    expect(onSettled).not.toHaveBeenCalled()
   })
 })

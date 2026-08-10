@@ -1,4 +1,5 @@
 import type { ManagedPaneInternal } from './pane-manager-types'
+import { fitRevealedPane } from './pane-reveal-fit'
 import { reattachWebglIfNeeded } from './pane-webgl-reattach'
 import { forceRepaintThroughRenderPause } from './terminal-render-pause-release'
 
@@ -53,17 +54,29 @@ function flushPaneRevealRepaints(): void {
 
   for (const pane of livePanes) {
     try {
-      reattachWebglIfNeeded(pane)
-      // Why: xterm can still consider a newly revealed pane non-intersecting
-      // for one frame. Release that pane's paused-render gate and repaint its
-      // current buffer without clearing the module-global glyph atlas shared
-      // by unrelated terminals.
-      if (!forceRepaintThroughRenderPause(pane.terminal) && pane.terminal.rows > 0) {
-        pane.terminal.refresh(0, pane.terminal.rows - 1)
-      }
+      // Why: retained paired-runtime panes were measured while display:none.
+      // Repainting before their reveal fit settles leaves xterm presenting the
+      // hidden geometry until new output or a hard refresh wakes it. Fit first,
+      // then repaint the same pane once its visible grid is authoritative.
+      fitRevealedPane(pane, () => repaintRevealedPane(pane))
     } catch {
       /* ignore — one pane's teardown must not block sibling repaint */
     }
+  }
+}
+
+function repaintRevealedPane(pane: ManagedPaneInternal): void {
+  try {
+    reattachWebglIfNeeded(pane)
+    // Why: xterm can still consider a newly revealed pane non-intersecting
+    // for one frame. Release that pane's paused-render gate and repaint its
+    // current buffer without clearing the module-global glyph atlas shared
+    // by unrelated terminals.
+    if (!forceRepaintThroughRenderPause(pane.terminal) && pane.terminal.rows > 0) {
+      pane.terminal.refresh(0, pane.terminal.rows - 1)
+    }
+  } catch {
+    /* ignore — the pane may be disposed while its reveal fit is settling */
   }
 }
 
