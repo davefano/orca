@@ -2,13 +2,12 @@
  * Eviction-exempt parked terminal tabs.
  *
  * Why: force-park unmounts restorable tabs under the hidden-worktree retention
- * budget, but some live local PTYs cannot reattach on remount. Those tabs must
- * keep their panes mounted so eviction does not orphan a live shell.
+ * budget, but some live local PTYs cannot reattach and remote-runtime mirrors
+ * can return stale after reattach. Those tabs must keep their panes mounted.
  */
-import { useAppStore } from '@/store'
 import { isEvictionExemptTerminalPty } from './terminal-hidden-worktree-retention'
 import {
-  resolveParkedTerminalPaneCandidates,
+  resolveParkedTerminalPtyIds,
   type ParkableTerminalTabModel
 } from './terminal-parked-tab-watchers'
 
@@ -36,8 +35,8 @@ export function isEvictionExemptTerminalTab(
   if (isEvictionExemptTerminalPty(tab.ptyId, worktreeId)) {
     return true
   }
-  return resolveParkedTerminalPaneCandidates(tab, useAppStore.getState()).some((pane) =>
-    isEvictionExemptTerminalPty(pane.ptyId, worktreeId)
+  return resolveParkedTerminalPtyIds(tab).some((ptyId) =>
+    isEvictionExemptTerminalPty(ptyId, worktreeId)
   )
 }
 

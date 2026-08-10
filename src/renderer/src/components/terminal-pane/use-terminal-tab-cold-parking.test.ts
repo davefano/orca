@@ -21,7 +21,10 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../../store', () => ({
-  useAppStore: (selector: (state: unknown) => unknown) => selector(mocks.storeState)
+  useAppStore: Object.assign(
+    (selector: (state: unknown) => unknown) => selector(mocks.storeState),
+    { getState: () => mocks.storeState }
+  )
 }))
 
 vi.mock('./terminal-eviction-exempt-tabs', () => ({
@@ -43,6 +46,12 @@ vi.mock('./terminal-eviction-exempt-tabs', () => ({
 vi.mock('./terminal-parked-tab-watchers', () => ({
   canWatcherCoverParkedTerminalTab: () => mocks.watcherCoverage,
   disposeParkedTerminalWatchersForWorktree: vi.fn(),
+  resolveParkedTerminalPtyIds: (tab: { id: string; ptyId: string | null }) => {
+    const panePtyIds = Object.values(
+      mocks.storeState.terminalLayoutsByTabId[tab.id]?.ptyIdsByLeafId ?? {}
+    )
+    return panePtyIds.length > 0 ? panePtyIds : [tab.ptyId]
+  },
   syncParkedTerminalTabWatchers: vi.fn()
 }))
 
@@ -95,7 +104,7 @@ describe('useTerminalTabColdParking measure-clock contract', () => {
     mocks.storeState.runtimeStatusByEnvironmentId = new Map()
   })
 
-  it('parks paired-runtime tabs only when their exact host advertises restore', () => {
+  it('keeps remote-runtime tabs mounted even when their host advertises restore', () => {
     const environmentId = 'paired-env'
     const remoteArgs = {
       ...hookArgs(false),
@@ -104,22 +113,38 @@ describe('useTerminalTabColdParking measure-clock contract', () => {
         { ...terminalTab('tab-2'), ptyId: `remote:${environmentId}@@term-2` }
       ]
     }
-    for (const [advertisedEnvironmentId, expected] of [
-      [environmentId, new Set(['tab-2'])],
-      ['other-env', new Set()]
-    ] as const) {
-      mocks.storeState.runtimeStatusByEnvironmentId = new Map([
-        [advertisedEnvironmentId, { status: { capabilities: ['terminal.paired-parking.v1'] } }]
-      ])
-      const { result, unmount } = renderHook(() => useTerminalTabColdParking(remoteArgs))
+    mocks.storeState.runtimeStatusByEnvironmentId = new Map([
+      [environmentId, { status: { capabilities: ['terminal.paired-parking.v1'] } }]
+    ])
+    const { result } = renderHook(() => useTerminalTabColdParking(remoteArgs))
 
-      act(() => {
-        vi.advanceTimersByTime(TERMINAL_TAB_HOT_RETAIN_MS + 1)
-      })
+    act(() => {
+      vi.advanceTimersByTime(TERMINAL_TAB_HOT_RETAIN_MS + 1)
+    })
 
-      expect(result.current).toEqual(expected)
-      unmount()
+    expect(result.current).toEqual(new Set())
+  })
+
+  it('keeps a mixed split tab mounted when its secondary pane is remote-runtime', () => {
+    const args = {
+      ...hookArgs(false),
+      terminalTabs: [terminalTab('tab-1')]
     }
+    mocks.storeState.terminalLayoutsByTabId = {
+      'tab-1': {
+        ptyIdsByLeafId: {
+          'leaf-local': `${WORKTREE_ID}@@session-tab-1`,
+          'leaf-remote': 'remote:paired-env@@term-1'
+        }
+      }
+    }
+    const { result } = renderHook(() => useTerminalTabColdParking(args))
+
+    act(() => {
+      vi.advanceTimersByTime(TERMINAL_TAB_HOT_RETAIN_MS + 1)
+    })
+
+    expect(result.current).toEqual(new Set())
   })
 
   // Why: the flip-damping pin removes the tab from the parked set, and every

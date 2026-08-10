@@ -109,6 +109,7 @@ import { getTerminalWorktreeColdParkRecheckDelayMs } from './terminal-pane/termi
 import {
   TERMINAL_WORKTREE_COLD_PARK_DELAY_MS,
   canParkTerminalWorktreeRenderers,
+  createTerminalViewParkRestorePolicy,
   isParkRestorableTerminalPty,
   selectPairedRuntimeParkingEnvironmentIds,
   selectColdParkedTerminalWorktrees,
@@ -134,7 +135,8 @@ import {
   pruneParkedTerminalWatchers,
   shouldDeferParkedPtyExitTabClose,
   syncParkedTerminalTabWatchers,
-  terminalWatcherLiveWorkspaceIds
+  terminalWatcherLiveWorkspaceIds,
+  resolveParkedTerminalPtyIds
 } from './terminal-pane/terminal-parked-tab-watchers'
 import { isMainTerminalSideEffectAuthorityForPty } from './terminal-pane/terminal-side-effect-facts-handler'
 import { appendUniqueOpenFileIds } from './terminal/unsaved-close-queue'
@@ -322,6 +324,7 @@ function Terminal(): React.JSX.Element | null {
   )
   const activeView = useAppStore((s) => s.activeView)
   const tabsByWorktree = useAppStore((s) => s.tabsByWorktree)
+  const terminalLayoutsByTabId = useAppStore((s) => s.terminalLayoutsByTabId)
   const pendingStartupByTabId = useAppStore((s) => s.pendingStartupByTabId)
   const terminalParkingEnabled = useAppStore((s) => s.settings?.terminalHiddenViewParking !== false)
   const terminalSshParkingEnabled = useAppStore((s) => s.settings?.terminalSshViewParking !== false)
@@ -965,7 +968,10 @@ function Terminal(): React.JSX.Element | null {
 
       retentionCandidates.push({
         worktreeId,
-        terminalTabs: tabsByWorktree[worktreeId] ?? [],
+        terminalTabs: (tabsByWorktree[worktreeId] ?? []).map((tab) => ({
+          ...tab,
+          panePtyIds: resolveParkedTerminalPtyIds(tab)
+        })),
         isVisible,
         shouldMeasureHiddenWorktree,
         hasActivityTerminalPortal,
@@ -974,10 +980,7 @@ function Terminal(): React.JSX.Element | null {
       })
     }
 
-    const restorePolicy = {
-      sshParkingEnabled: terminalSshParkingEnabled,
-      pairedRuntimeParkingEnvironmentIds
-    }
+    const restorePolicy = createTerminalViewParkRestorePolicy(terminalSshParkingEnabled)
     const nextParkedTerminalWorktreeIds = selectColdParkedTerminalWorktrees({
       worktrees: retentionCandidates,
       pendingStartupByTabId,
@@ -1007,9 +1010,10 @@ function Terminal(): React.JSX.Element | null {
       }
     }
     // C1 retention budget: worktrees ordinary parking can never evict (SSH off,
-    // remote-runtime, uncoverable tabs) force-park beyond a count/TTL bound —
-    // added AFTER the coverage veto because darkness for their uncoverable tabs
-    // is the accepted cost of bounding retention.
+    // uncoverable tabs) force-park beyond a count/TTL bound — remote-runtime
+    // tabs stay mounted through the per-tab exemption below. This runs AFTER
+    // the coverage veto because darkness for uncoverable tabs is the accepted
+    // cost of bounding retention.
     const retentionBudgetCandidates: TerminalWorktreeRetentionCandidate[] = retentionCandidates.map(
       (candidate) => {
         const tabs = tabsByWorktree[candidate.worktreeId] ?? []
@@ -1080,8 +1084,8 @@ function Terminal(): React.JSX.Element | null {
         // last-known content. includeLocalBuffers:false is required here, not
         // optional — a heap fix must not plant 512KB/pane of scrollback strings
         // in the store for local worktrees that already have the daemon
-        // snapshot; a remote-runtime pane in a local repo likewise needs none,
-        // its reveal repaints from the runtime's own subscribe snapshot.
+        // snapshot. Paired-runtime panes are eviction-exempt and never reach
+        // this capture set.
         // Eviction-exempt tabs never unmount (per-tab exclusion), so they need
         // no pre-unmount capture — skipping spares a serialize+setTabLayout
         // walk on live panes per force-park episode.
@@ -1158,12 +1162,12 @@ function Terminal(): React.JSX.Element | null {
     activityTerminalPortals,
     backgroundMountRevision,
     pendingStartupByTabId,
-    pairedRuntimeParkingEnvironmentIds,
     renderedActiveWorktreeId,
     tabsByWorktree,
     terminalParkingEnabled,
     terminalParkingRevision,
     terminalRetentionBudgetEnabled,
+    terminalLayoutsByTabId,
     terminalSshParkingEnabled,
     workspaceSurfaces
   ])

@@ -18,9 +18,10 @@ import type { TerminalTab } from '../../../../shared/types'
 // first via force-park. The TTL is absolute: the last-active exemption bounds
 // the cap, never the clock.
 // NOT covered by this bound: eviction-exempt TABS (isEvictionExemptTerminalPty
-// — live local ptys a remount would respawn, orphaning the shell). Their panes
-// stay mounted through a force-park at any age, so a fleet-wide daemon
-// fail-open can leave the budget freeing nothing; Terminal.tsx logs that
+// — live local ptys a remount would respawn, plus remote-runtime mirrors whose
+// reattach can leave a stale renderer). Their panes stay mounted through a
+// force-park at any age, so a fleet-wide daemon fail-open or remote-only
+// workspace can leave the budget freeing nothing; Terminal.tsx logs that
 // degenerate case rather than pretending the bound held.
 // Also NOT covered: per-pane scrollback size. Hidden-pane scrollback demotion
 // was intentionally removed — the bound is worktree count + TTL only, so a
@@ -42,9 +43,10 @@ export function hasPendingRetentionSpawnWork(
   return Boolean(tab.pendingActivationSpawn && (!tab.ptyId || !isRemoteRuntimePtyId(tab.ptyId)))
 }
 
-// Why: an eviction-exempt pty is a live local one a remount cannot restore
-// faithfully (daemon-fail-open/foreign ids or a preserved legacy daemon). Its
-// TAB keeps its mounted pane when the worktree force-parks.
+// Why: an eviction-exempt pty cannot safely cross an unmount/remount boundary:
+// either it is live local state that would respawn/orphan, or a remote mirror
+// whose renderer can remain stale after reattach. Its TAB stays mounted when
+// the worktree force-parks.
 // Per-PTY, not per-tab: the coverage veto that makes a worktree a retention
 // candidate walks every split pane, so the exemption must too (see
 // isEvictionExemptTerminalTab).
@@ -52,8 +54,14 @@ export function isEvictionExemptTerminalPty(
   ptyId: string | null | undefined,
   worktreeId: string
 ): boolean {
-  if (!ptyId || isRemoteRuntimePtyId(ptyId) || parseAppSshPtyId(ptyId)) {
+  if (!ptyId || parseAppSshPtyId(ptyId)) {
     return false
+  }
+  // Why: remote-runtime PTYs deliberately stay mounted during ordinary hidden
+  // view parking. The retention budget must honor the same rule; otherwise its
+  // force-park path silently reintroduces the stale remount after the TTL.
+  if (isRemoteRuntimePtyId(ptyId)) {
+    return true
   }
   return (
     !isSnapshotBackedTerminalPty(ptyId, worktreeId) ||
@@ -83,8 +91,8 @@ export type TerminalWorktreeRetentionCandidate = {
  * panes unmount, watchers cover the tabs whose transport exists, and reveal
  * restores per pty class (the app-restart experience). Eviction-exempt tabs
  * do NOT veto the worktree: they keep their mounted panes via the per-tab
- * exclusion (Activity-portal pattern) while sibling tabs unmount, so one
- * exempt tab can no longer pin co-located remote-runtime tabs forever.
+ * exclusion (Activity-portal pattern) while sibling tabs unmount. Paired
+ * runtime tabs are themselves exempt because their mirror must stay mounted.
  * Ranking reuses the hot-retain machinery, so deterministic ties hold here too,
  * and the verdict changes only at deadlines or on real state transitions (no
  * new flip-loop inputs). The last-active exemption it carries spares one

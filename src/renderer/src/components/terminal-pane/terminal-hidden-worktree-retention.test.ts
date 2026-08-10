@@ -63,10 +63,10 @@ describe('isEvictionExemptTerminalPty', () => {
     expect(isEvictionExemptTerminalPty('other::wt@@session-1', worktreeId)).toBe(true)
   })
 
-  it('never exempts authoritative, SSH, remote-runtime, or unbound ptys', () => {
+  it('exempts remote-runtime ptys from force-park while leaving restorable local and SSH ptys evictable', () => {
     expect(isEvictionExemptTerminalPty(currentPtyId, worktreeId)).toBe(false)
     expect(isEvictionExemptTerminalPty('ssh:conn-1@@pty-1', worktreeId)).toBe(false)
-    expect(isEvictionExemptTerminalPty('remote:env-1@@t-1', worktreeId)).toBe(false)
+    expect(isEvictionExemptTerminalPty('remote:env-1@@t-1', worktreeId)).toBe(true)
     expect(isEvictionExemptTerminalPty(null, worktreeId)).toBe(false)
   })
 

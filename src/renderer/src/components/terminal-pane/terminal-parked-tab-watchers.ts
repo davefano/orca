@@ -49,6 +49,17 @@ export {
 export type { ParkableTerminalTabModel } from './terminal-parked-watcher-reconciliation'
 export type ParkedTerminalPtyEligibility = (ptyId: string) => boolean
 
+/** Every split-pane PTY that ordinary parking must be able to restore. */
+export function resolveParkedTerminalPtyIds(tab: ParkableTerminalTabModel): (string | null)[] {
+  const ptyIds = resolveParkedTerminalPaneCandidates(tab, useAppStore.getState()).map(
+    (pane) => pane.ptyId
+  )
+  if (tab.ptyId !== null && !ptyIds.includes(tab.ptyId)) {
+    ptyIds.push(tab.ptyId)
+  }
+  return ptyIds.length > 0 ? ptyIds : [tab.ptyId]
+}
+
 const allowOrdinaryParkRestore = (ptyId: string): boolean =>
   isRemoteRuntimePtyId(ptyId) ||
   parseAppSshPtyId(ptyId) !== null ||

@@ -16,7 +16,7 @@ import {
 import { getTerminalTabColdParkRecheckDelayMs } from './terminal-cold-park-recheck-deadlines'
 import {
   TERMINAL_TAB_COLD_PARK_DELAY_MS,
-  selectPairedRuntimeParkingEnvironmentIds,
+  createTerminalViewParkRestorePolicy,
   selectColdParkedTerminalTabs,
   type TerminalTabColdParkCandidate
 } from './terminal-hidden-view-parking'
@@ -34,6 +34,7 @@ import { selectSleepingRecordParkExemptTabIds } from './sleeping-record-park-exe
 import {
   canWatcherCoverParkedTerminalTab,
   disposeParkedTerminalWatchersForWorktree,
+  resolveParkedTerminalPtyIds,
   syncParkedTerminalTabWatchers
 } from './terminal-parked-tab-watchers'
 
@@ -93,10 +94,8 @@ export function useTerminalTabColdParking(args: {
   const terminalSshParkingEnabled = useAppStore(
     (state) => state.settings?.terminalSshViewParking !== false
   )
-  const runtimeStatusByEnvironmentId = useAppStore((state) => state.runtimeStatusByEnvironmentId)
-  const pairedRuntimeParkingEnvironmentIds = useMemo(
-    () => selectPairedRuntimeParkingEnvironmentIds(runtimeStatusByEnvironmentId),
-    [runtimeStatusByEnvironmentId]
+  const terminalParkingLayoutKey = useAppStore((state) =>
+    selectEvictionExemptTerminalTabLayoutKey(state, terminalTabs)
   )
   const sleepingAgentSessionsByPaneKey = useAppStore(
     (state) => state.sleepingAgentSessionsByPaneKey
@@ -190,6 +189,7 @@ export function useTerminalTabColdParking(args: {
       return {
         id: terminalTab.id,
         ptyId: terminalTab.ptyId,
+        panePtyIds: resolveParkedTerminalPtyIds(terminalTab),
         pendingActivationSpawn: terminalTab.pendingActivationSpawn,
         isVisible,
         hasActivityTerminalPortal,
@@ -204,10 +204,7 @@ export function useTerminalTabColdParking(args: {
       parkingEnabled: terminalParkingEnabled,
       nowMs,
       parkCooldownUntilMs: measureParkCooldownUntilRef.current,
-      restorePolicy: {
-        sshParkingEnabled: terminalSshParkingEnabled,
-        pairedRuntimeParkingEnvironmentIds
-      },
+      restorePolicy: createTerminalViewParkRestorePolicy(terminalSshParkingEnabled),
       ...overrides
     })
     const { parkedTabIds, parkVerdictPinUntilMsByTabId } = withholdUnparkableTerminalTabs({
@@ -252,9 +249,9 @@ export function useTerminalTabColdParking(args: {
     assignments,
     isWorktreeActive,
     pendingStartupByTabId,
-    pairedRuntimeParkingEnvironmentIds,
     shouldMeasureHiddenWorktree,
     terminalParkingEnabled,
+    terminalParkingLayoutKey,
     terminalSshParkingEnabled,
     terminalTabParkingRevision,
     terminalTabs,

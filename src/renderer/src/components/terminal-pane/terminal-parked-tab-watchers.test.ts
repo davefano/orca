@@ -898,10 +898,14 @@ describe('terminal-parked-tab-watchers', () => {
       ).toBe(true)
     })
 
-    it('never exempts remote-runtime or SSH panes', () => {
+    it('exempts remote-runtime panes from force-park but not direct SSH panes', () => {
       capturePanes([
-        { ptyId: 'remote:env-1@@t-1', paneId: 1, leafId: LEAF_ID, drivesTabTitle: true },
-        { ptyId: 'ssh:conn-1@@pty-1', paneId: 2, leafId: SECOND_LEAF_ID, drivesTabTitle: false }
+        { ptyId: 'remote:env-1@@t-1', paneId: 1, leafId: LEAF_ID, drivesTabTitle: true }
+      ])
+      expect(isEvictionExemptTerminalTab({ id: TAB_ID, ptyId: null }, WORKTREE_ID)).toBe(true)
+
+      capturePanes([
+        { ptyId: 'ssh:conn-1@@pty-1', paneId: 1, leafId: LEAF_ID, drivesTabTitle: true }
       ])
       expect(isEvictionExemptTerminalTab({ id: TAB_ID, ptyId: null }, WORKTREE_ID)).toBe(false)
     })

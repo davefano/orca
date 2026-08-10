@@ -9,6 +9,7 @@ import {
   TERMINAL_WORKTREE_PARK_DELAY_MS,
   canParkTerminalTabRenderer,
   canParkTerminalWorktreeRenderers,
+  createTerminalViewParkRestorePolicy,
   isParkRestorableTerminalPty,
   isSnapshotBackedTerminalPty,
   selectPairedRuntimeParkingEnvironmentIds,
@@ -112,6 +113,13 @@ describe('isParkRestorableTerminalPty', () => {
       expect(isParkRestorableTerminalPty(ptyId, worktreeId, sshPolicy)).toBe(false)
     }
   })
+
+  it('keeps paired runtime capability out of ordinary view parking', () => {
+    const policy = createTerminalViewParkRestorePolicy(true)
+
+    expect(isParkRestorableTerminalPty('ssh:ssh-1@@pty-1', worktreeId, policy)).toBe(true)
+    expect(isParkRestorableTerminalPty('remote:env-1@@terminal-1', worktreeId, policy)).toBe(false)
+  })
 })
 
 describe('canParkTerminalWorktreeRenderers', () => {
@@ -147,6 +155,21 @@ describe('canParkTerminalWorktreeRenderers', () => {
         ...sshArgs,
         terminalTabs: [...sshArgs.terminalTabs, { id: 'tab-2', ptyId: 'remote:env-1@@t-1' }],
         restorePolicy: { sshParkingEnabled: true }
+      })
+    ).toBe(false)
+  })
+
+  it('keeps a worktree mounted when a secondary split pane is remote-runtime', () => {
+    expect(
+      canParkTerminalWorktreeRenderers({
+        ...base,
+        terminalTabs: [
+          {
+            id: 'tab-1',
+            ptyId: 'repo::/worktree@@session-1',
+            panePtyIds: ['repo::/worktree@@session-1', 'remote:env-1@@terminal-1']
+          }
+        ]
       })
     ).toBe(false)
   })
@@ -296,6 +319,18 @@ describe('canParkTerminalTabRenderer', () => {
         restorePolicy: { pairedRuntimeParkingEnvironmentIds: new Set(['env-1']) }
       })
     ).toBe(true)
+  })
+
+  it('keeps a tab mounted when a secondary split pane is remote-runtime', () => {
+    expect(
+      canParkTerminalTabRenderer({
+        ...base,
+        terminalTab: {
+          ...base.terminalTab,
+          panePtyIds: ['wt-1@@session-1', 'remote:env-1@@terminal-1']
+        }
+      })
+    ).toBe(false)
   })
 
   it('honors a per-call cold-park delay override', () => {

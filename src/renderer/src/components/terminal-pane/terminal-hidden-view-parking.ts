@@ -30,7 +30,13 @@ export type TerminalColdParkPolicyOverrides = {
   retentionLimit?: number
 }
 
-export type ColdParkableTerminalTab = Pick<TerminalTab, 'id' | 'ptyId' | 'pendingActivationSpawn'>
+export type ColdParkableTerminalTab = Pick<
+  TerminalTab,
+  'id' | 'ptyId' | 'pendingActivationSpawn'
+> & {
+  /** Every resolved split-pane PTY. Omitted only by callers with no layout view. */
+  panePtyIds?: readonly (string | null)[]
+}
 
 export type TerminalWorktreeColdParkCandidate = {
   worktreeId: string
@@ -65,6 +71,18 @@ function hasPendingActivationSpawn(tab: ColdParkableTerminalTab): boolean {
   )
 }
 
+function areAllTerminalPanePtysParkRestorable(
+  tab: ColdParkableTerminalTab,
+  worktreeId: string,
+  restorePolicy?: TerminalParkRestorePolicy
+): boolean {
+  const panePtyIds = tab.panePtyIds ?? [tab.ptyId]
+  return (
+    panePtyIds.length > 0 &&
+    panePtyIds.every((ptyId) => isParkRestorableTerminalPty(ptyId, worktreeId, restorePolicy))
+  )
+}
+
 // Why: snapshot-backed = local daemon session owned by this worktree (foreign
 // ids reattach through a path parking cannot replay). SSH is restorable too,
 // via isParkRestorableTerminalPty + main's headless model; only remote-runtime
@@ -88,6 +106,20 @@ export type TerminalParkRestorePolicy = {
   sshParkingEnabled?: boolean
   /** Exact paired environments whose host advertises bounded snapshot restore. */
   pairedRuntimeParkingEnvironmentIds?: ReadonlySet<string>
+}
+
+/**
+ * Restore policy for ordinary hide/reveal parking.
+ *
+ * Paired-runtime snapshot capability intentionally stays out of this policy:
+ * its renderer is a mirror, and unmount/reattach can leave the pane stale
+ * until fresh PTY output. The capability remains available to bounded cold
+ * activation restore, while direct SSH panes retain their local-main path.
+ */
+export function createTerminalViewParkRestorePolicy(
+  sshParkingEnabled: boolean
+): TerminalParkRestorePolicy {
+  return { sshParkingEnabled }
 }
 
 export function selectPairedRuntimeParkingEnvironmentIds(
@@ -161,7 +193,7 @@ export function canParkTerminalWorktreeRenderers(args: {
     if (hasPendingActivationSpawn(tab)) {
       return false
     }
-    return isParkRestorableTerminalPty(tab.ptyId, args.worktreeId, args.restorePolicy)
+    return areAllTerminalPanePtysParkRestorable(tab, args.worktreeId, args.restorePolicy)
   })
 }
 
@@ -195,7 +227,7 @@ export function canParkTerminalTabRenderer(args: {
   if (hasPendingActivationSpawn(tab)) {
     return false
   }
-  return isParkRestorableTerminalPty(tab.ptyId, args.worktreeId, args.restorePolicy)
+  return areAllTerminalPanePtysParkRestorable(tab, args.worktreeId, args.restorePolicy)
 }
 
 export type ColdParkRetainCandidate = { id: string; hiddenSinceMs: number }
