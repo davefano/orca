@@ -2,17 +2,17 @@
   "schemaVersion": 1,
   "freeze": {
     "status": "frozen",
-    "promotedAt": "2026-08-07",
+    "promotedAt": "2026-08-10",
     "minimumSoakHours": 24,
     "requiresExplicitPromotion": true
   },
   "release": {
     "upstreamTag": "v1.4.176",
-    "sourceCommit": "3ac459c106",
-    "packagingCommit": "e15de72e6d",
-    "appVersion": "1.4.176-local.1786217446427.1a6042b174b5",
-    "appAsarSha256": "9e3001317e5f49dae6780b2cd6a23f2b3a18b5097ca3bb20c5b77cb87540d4dc",
-    "artifactSha256": "bdeea3b27c820edabd3f0deef970202f901d6bee04d6b864b7bd24a22ad467c5",
+    "sourceCommit": "791c49567e",
+    "packagingCommit": "7267980c14",
+    "appVersion": "1.4.176",
+    "appAsarSha256": "aada5e94b494ef72b1587273d8b7a9973361f00abf816b3ec9eb71ba65cadfcd",
+    "artifactSha256": "f613207a5ff0b437b3309bd9d8905e4fbe6894f40e9019dc6508021c917f4225",
     "daemonProtocol": 32
   },
   "hosts": {
