@@ -26,7 +26,7 @@ describe('verify-macos-release-env', () => {
     const result = verify({
       APPLE_KEYCHAIN: '/tmp/login.keychain-db',
       APPLE_KEYCHAIN_PROFILE: 'OrcaTeal-Notary',
-      CSC_NAME: 'Developer ID Application: Example Corp (TEAMID1234)'
+      CSC_NAME: 'Example Corp (TEAMID1234)'
     })
 
     assert.equal(result.status, 0, result.stderr)
@@ -49,7 +49,7 @@ describe('verify-macos-release-env', () => {
       APPLE_API_ISSUER: '00000000-0000-0000-0000-000000000000',
       APPLE_API_KEY: '/tmp/AuthKey_KEYID12345.p8',
       APPLE_API_KEY_ID: 'KEYID12345',
-      CSC_NAME: 'Developer ID Application: Example Corp (TEAMID1234)'
+      CSC_NAME: 'Example Corp (TEAMID1234)'
     })
 
     assert.equal(result.status, 0, result.stderr)
@@ -58,7 +58,7 @@ describe('verify-macos-release-env', () => {
   it('rejects partial credential alternatives', () => {
     const result = verify({
       APPLE_KEYCHAIN_PROFILE: 'OrcaTeal-Notary',
-      CSC_NAME: 'Developer ID Application: Example Corp (TEAMID1234)'
+      CSC_NAME: 'Example Corp (TEAMID1234)'
     })
 
     assert.notEqual(result.status, 0)
