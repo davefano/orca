@@ -313,6 +313,22 @@ function findFirstLeaf(root: TabGroupLayoutNode): string {
   return root.type === 'leaf' ? root.groupId : findFirstLeaf(root.first)
 }
 
+function collectLayoutGroupIds(
+  root: TabGroupLayoutNode | undefined,
+  ids = new Set<string>()
+): Set<string> {
+  if (!root) {
+    return ids
+  }
+  if (root.type === 'leaf') {
+    ids.add(root.groupId)
+    return ids
+  }
+  collectLayoutGroupIds(root.first, ids)
+  collectLayoutGroupIds(root.second, ids)
+  return ids
+}
+
 function partitionPinnedTabOrder(tabOrder: string[], tabs: Tab[], movingTabId: string): string[] {
   const tabById = new Map(tabs.map((tab) => [tab.id, tab]))
   const withoutMoving = dedupeTabOrder(tabOrder).filter((id) => id !== movingTabId)
@@ -640,13 +656,39 @@ export function projectWorktreeTabModelReconciliation(
     return terminalTabHasReconnectablePty(state, tab.id, tab.ptyId)
   })
   const orphanTerminalIds = getOrphanTerminalIds(state, worktreeId)
+  const liveTerminalIds = new Set(
+    runtimeTerminalTabs.filter((tab) => !orphanTerminalIds.has(tab.id)).map((tab) => tab.id)
+  )
+  const groupById = new Map(groups.map((group) => [group.id, group]))
+  const currentLayout = state.layoutByWorktree[worktreeId]
+  const layoutGroupIds = collectLayoutGroupIds(currentLayout)
+  const orderedTabIdsByGroupId = new Map(groups.map((group) => [group.id, new Set(group.tabOrder)]))
+  const detachedLiveUnifiedTabs: Tab[] = []
+  let needsPresentationFallback = false
+  for (const tab of unifiedTabs) {
+    if (
+      tab.contentType !== 'terminal' ||
+      !liveTerminalIds.has(tab.entityId) ||
+      orderedTabIdsByGroupId.get(tab.groupId)?.has(tab.id)
+    ) {
+      continue
+    }
+    detachedLiveUnifiedTabs.push(tab)
+    needsPresentationFallback ||=
+      !groupById.has(tab.groupId) ||
+      (currentLayout !== undefined && !layoutGroupIds.has(tab.groupId))
+  }
+  const preferredPresentationGroupId =
+    (layoutGroupIds.has(state.activeGroupIdByWorktree[worktreeId])
+      ? state.activeGroupIdByWorktree[worktreeId]
+      : undefined) ?? (currentLayout ? findFirstLeaf(currentLayout) : undefined)
   const ensuredGroupState =
-    legacyRuntimeTerminalTabs.length > 0
+    legacyRuntimeTerminalTabs.length > 0 || needsPresentationFallback
       ? ensureGroup(
           state.groupsByWorktree,
           state.activeGroupIdByWorktree,
           worktreeId,
-          state.activeGroupIdByWorktree[worktreeId]
+          preferredPresentationGroupId
         )
       : null
   const reconciliationGroup = ensuredGroupState?.group ?? groups[0] ?? null
@@ -672,29 +714,52 @@ export function projectWorktreeTabModelReconciliation(
             sortOrder: tab.sortOrder,
             createdAt: tab.createdAt
           }))
-  const reconciledUnifiedTabs =
-    restoredLegacyTabs.length > 0 ? [...unifiedTabs, ...restoredLegacyTabs] : unifiedTabs
-  const rememberedLegacyActiveTabId = state.activeTabIdByWorktree[worktreeId]
-  const restoredLegacyTabIds = new Set(restoredLegacyTabs.map((tab) => tab.id))
-  const legacyFallbackActiveTabId =
-    rememberedLegacyActiveTabId && restoredLegacyTabIds.has(rememberedLegacyActiveTabId)
-      ? rememberedLegacyActiveTabId
-      : (restoredLegacyTabs[0]?.id ?? null)
-  const reconciledGroups =
-    restoredLegacyTabs.length > 0 && reconciliationGroup
-      ? updateGroup(ensuredGroupState!.groupsByWorktree[worktreeId] ?? [], {
-          ...reconciliationGroup,
-          // Why: restore runtime tabs into the active/root group so reattach cannot spawn a duplicate.
-          activeTabId: reconciliationGroup.activeTabId ?? legacyFallbackActiveTabId,
-          tabOrder: dedupeTabOrder([
-            ...reconciliationGroup.tabOrder,
-            ...restoredLegacyTabs.map((tab) => tab.id)
-          ])
-        })
-      : groups
-  const liveTerminalIds = new Set(
-    runtimeTerminalTabs.filter((tab) => !orphanTerminalIds.has(tab.id)).map((tab) => tab.id)
+  const rehomedDetachedLiveUnifiedTabs = detachedLiveUnifiedTabs.map((tab) =>
+    reconciliationGroup &&
+    (!groupById.has(tab.groupId) ||
+      (currentLayout !== undefined && !layoutGroupIds.has(tab.groupId)))
+      ? { ...tab, groupId: reconciliationGroup.id }
+      : tab
   )
+  const rehomedDetachedLiveUnifiedTabById = new Map(
+    rehomedDetachedLiveUnifiedTabs.map((tab) => [tab.id, tab])
+  )
+  const rehomedUnifiedTabs =
+    needsPresentationFallback && reconciliationGroup
+      ? unifiedTabs.map((tab) => rehomedDetachedLiveUnifiedTabById.get(tab.id) ?? tab)
+      : unifiedTabs
+  const reconciledUnifiedTabs =
+    restoredLegacyTabs.length > 0
+      ? [...rehomedUnifiedTabs, ...restoredLegacyTabs]
+      : rehomedUnifiedTabs
+  const recoveredTabsByGroupId = new Map<string, string[]>()
+  const recoveredTabs = [...rehomedDetachedLiveUnifiedTabs, ...restoredLegacyTabs]
+  const recoveredTabIds = new Set(recoveredTabs.map((tab) => tab.id))
+  for (const tab of recoveredTabs) {
+    const ids = recoveredTabsByGroupId.get(tab.groupId) ?? []
+    ids.push(tab.id)
+    recoveredTabsByGroupId.set(tab.groupId, ids)
+  }
+  const rememberedActiveTabId = state.activeTabIdByWorktree[worktreeId]
+  const baseGroups = ensuredGroupState?.groupsByWorktree[worktreeId] ?? groups
+  const reconciledGroups = baseGroups.map((group) => {
+    const recoveredIds = recoveredTabsByGroupId.get(group.id) ?? []
+    if (recoveredIds.length === 0) {
+      return group
+    }
+    const tabOrder = dedupeTabOrder([...group.tabOrder, ...recoveredIds])
+    const activeTabId =
+      rememberedActiveTabId && recoveredIds.includes(rememberedActiveTabId)
+        ? rememberedActiveTabId
+        : (group.activeTabId ?? recoveredIds[0] ?? null)
+    return {
+      ...group,
+      // Why: a live terminal can survive while its client-local group membership
+      // disappears. Reinsert it instead of treating the missing pane as a dead session.
+      activeTabId,
+      tabOrder
+    }
+  })
   const liveEditorIds = new Set(
     state.openFiles.filter((file) => file.worktreeId === worktreeId).map((file) => file.id)
   )
@@ -741,19 +806,33 @@ export function projectWorktreeTabModelReconciliation(
   const currentActiveGroupId =
     state.activeGroupIdByWorktree[worktreeId] ??
     ensuredGroupState?.activeGroupIdByWorktree[worktreeId]
+  const rememberedRecoveredGroupId =
+    rememberedActiveTabId && recoveredTabIds.has(rememberedActiveTabId)
+      ? (reconciledUnifiedTabs.find((tab) => tab.id === rememberedActiveTabId)?.groupId ?? null)
+      : null
   const activeGroupStillExists = nextGroups.some((group) => group.id === currentActiveGroupId)
-  const nextActiveGroupId = activeGroupStillExists
-    ? currentActiveGroupId
-    : (nextGroups.find((group) => group.activeTabId !== null)?.id ??
+  let nextActiveGroupId = currentActiveGroupId
+  if (
+    rememberedRecoveredGroupId &&
+    nextGroups.some((group) => group.id === rememberedRecoveredGroupId)
+  ) {
+    nextActiveGroupId = rememberedRecoveredGroupId
+  } else if (!activeGroupStillExists) {
+    nextActiveGroupId =
+      nextGroups.find((group) => group.activeTabId !== null)?.id ??
       nextGroups[0]?.id ??
-      currentActiveGroupId)
+      currentActiveGroupId
+  }
   const groupsChanged =
     nextGroups.length !== groups.length ||
     nextGroups.some((group, index) => group !== groups[index])
-  const tabsChanged = validTabs.length !== unifiedTabs.length || restoredLegacyTabs.length > 0
+  const tabsChanged =
+    validTabs.length !== unifiedTabs.length ||
+    restoredLegacyTabs.length > 0 ||
+    needsPresentationFallback
   const activeGroupChanged = nextActiveGroupId !== currentActiveGroupId
   const baseNextLayout =
-    restoredLegacyTabs.length > 0 && reconciliationGroup
+    recoveredTabIds.size > 0 && reconciliationGroup
       ? (state.layoutByWorktree[worktreeId] ?? { type: 'leaf', groupId: reconciliationGroup.id })
       : state.layoutByWorktree[worktreeId]
   const validGroupIds = new Set(nextGroups.map((group) => group.id))
@@ -763,7 +842,6 @@ export function projectWorktreeTabModelReconciliation(
       : baseNextLayout
   const nextLayout =
     prunedNextLayout ?? (nextGroups[0] ? { type: 'leaf', groupId: nextGroups[0].id } : undefined)
-  const currentLayout = state.layoutByWorktree[worktreeId]
   const layoutChanged = nextLayout !== currentLayout
   let patch: Partial<AppState> = {}
 

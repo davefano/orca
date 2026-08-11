@@ -3097,6 +3097,53 @@ describe('setActiveWorktree', () => {
     // File ID should still be tracked for background state
     expect(s.activeFileId).toBe(fileId)
   })
+
+  it('restores a live terminal tab whose pane membership disappeared before worktree activation', () => {
+    const store = createTestStore()
+    const wt = 'repo1::/path/wt1'
+    const tabId = 'terminal-live'
+    const groupId = 'group-live'
+    const runtimeTab = makeTab({ id: tabId, worktreeId: wt, ptyId: 'pty-live' })
+
+    seedStore(store, {
+      worktreesByRepo: {
+        repo1: [makeWorktree({ id: wt, repoId: 'repo1', path: '/path/wt1' })]
+      },
+      activeWorktreeId: null,
+      tabsByWorktree: {
+        [wt]: [runtimeTab]
+      },
+      ptyIdsByTabId: { [tabId]: ['pty-live'] },
+      unifiedTabsByWorktree: {
+        [wt]: [makeUnifiedTab({ id: tabId, entityId: tabId, groupId, worktreeId: wt })]
+      },
+      groupsByWorktree: {
+        [wt]: [makeTabGroup({ id: groupId, worktreeId: wt, activeTabId: null, tabOrder: [] })]
+      },
+      activeGroupIdByWorktree: { [wt]: groupId },
+      activeTabIdByWorktree: { [wt]: tabId },
+      layoutByWorktree: { [wt]: { type: 'leaf', groupId } },
+      refreshGitHubForWorktree: vi.fn(),
+      refreshGitHubForWorktreeIfStale: vi.fn()
+    })
+
+    store.getState().setActiveWorktree(wt)
+
+    const state = store.getState()
+    expect(state.activeWorktreeId).toBe(wt)
+    expect(state.activeTabId).toBe(tabId)
+    expect(state.groupsByWorktree[wt]?.[0]).toMatchObject({
+      activeTabId: tabId,
+      tabOrder: [tabId]
+    })
+    expect(state.tabsByWorktree[wt]).toHaveLength(1)
+    expect(state.tabsByWorktree[wt]?.[0]).toMatchObject({
+      id: runtimeTab.id,
+      ptyId: runtimeTab.ptyId,
+      worktreeId: runtimeTab.worktreeId
+    })
+    expect(state.ptyIdsByTabId[tabId]).toEqual(['pty-live'])
+  })
 })
 
 // Why: sleep must drop live + retained agent-status rows, else a mid-turn agent stays "working" until the 30-min stale TTL.

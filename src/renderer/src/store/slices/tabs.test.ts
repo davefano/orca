@@ -107,6 +107,7 @@ globalThis.window = { api: mockApi }
 import {
   createTestStore,
   makeOpenFile,
+  makeTab,
   makeTabGroup,
   makeUnifiedTab,
   makeWorktree
@@ -2332,6 +2333,228 @@ describe('TabsSlice', () => {
         type: 'leaf',
         groupId: restoredGroup?.id
       })
+    })
+
+    it('reattaches a live unified terminal that fell out of every tab group', () => {
+      const terminalId = 'live-terminal-1'
+      const groupId = 'g-live'
+
+      store.setState({
+        tabsByWorktree: {
+          [WT]: [makeTab({ id: terminalId, ptyId: 'pty-live', worktreeId: WT, title: 'Claude' })]
+        },
+        ptyIdsByTabId: { [terminalId]: ['pty-live'] },
+        unifiedTabsByWorktree: {
+          [WT]: [
+            makeUnifiedTab({
+              id: terminalId,
+              entityId: terminalId,
+              groupId,
+              worktreeId: WT,
+              label: 'Claude'
+            })
+          ]
+        },
+        groupsByWorktree: {
+          [WT]: [makeTabGroup({ id: groupId, worktreeId: WT })]
+        },
+        activeGroupIdByWorktree: { [WT]: groupId },
+        activeTabIdByWorktree: { [WT]: terminalId },
+        layoutByWorktree: { [WT]: { type: 'leaf', groupId } }
+      })
+
+      const result = store.getState().reconcileWorktreeTabModel(WT)
+      const state = store.getState()
+
+      expect(result.renderableTabCount).toBe(1)
+      expect(result.activeRenderableTabId).toBe(terminalId)
+      expect(state.groupsByWorktree[WT]).toEqual([
+        expect.objectContaining({
+          id: groupId,
+          activeTabId: terminalId,
+          tabOrder: [terminalId]
+        })
+      ])
+      expect(state.unifiedTabsByWorktree[WT]).toEqual([
+        expect.objectContaining({ id: terminalId, groupId })
+      ])
+    })
+
+    it('rehomes a live unified terminal whose persisted group disappeared', () => {
+      const terminalId = 'live-terminal-1'
+
+      store.setState({
+        tabsByWorktree: {
+          [WT]: [makeTab({ id: terminalId, ptyId: 'pty-live', worktreeId: WT, title: 'Claude' })]
+        },
+        ptyIdsByTabId: { [terminalId]: ['pty-live'] },
+        unifiedTabsByWorktree: {
+          [WT]: [
+            makeUnifiedTab({
+              id: terminalId,
+              entityId: terminalId,
+              groupId: 'missing-group',
+              worktreeId: WT,
+              label: 'Claude'
+            })
+          ]
+        },
+        groupsByWorktree: { [WT]: [] },
+        activeGroupIdByWorktree: { [WT]: 'missing-group' },
+        activeTabIdByWorktree: { [WT]: terminalId },
+        layoutByWorktree: { [WT]: { type: 'leaf', groupId: 'missing-group' } }
+      })
+
+      const result = store.getState().reconcileWorktreeTabModel(WT)
+      const state = store.getState()
+      const restoredGroup = state.groupsByWorktree[WT]?.[0]
+
+      expect(result.activeRenderableTabId).toBe(terminalId)
+      expect(restoredGroup).toMatchObject({
+        activeTabId: terminalId,
+        tabOrder: [terminalId]
+      })
+      expect(state.unifiedTabsByWorktree[WT]?.[0]?.groupId).toBe(restoredGroup?.id)
+      expect(state.layoutByWorktree[WT]).toEqual({ type: 'leaf', groupId: restoredGroup?.id })
+    })
+
+    it('rehomes a detached live terminal from a surviving group absent from the layout', () => {
+      const terminalId = 'live-terminal-1'
+      const visibleGroupId = 'g-visible'
+      const hiddenGroupId = 'g-hidden'
+
+      store.setState({
+        tabsByWorktree: {
+          [WT]: [makeTab({ id: terminalId, ptyId: 'pty-live', worktreeId: WT, title: 'Claude' })]
+        },
+        ptyIdsByTabId: { [terminalId]: ['pty-live'] },
+        unifiedTabsByWorktree: {
+          [WT]: [
+            makeUnifiedTab({
+              id: 'simulator-1',
+              entityId: 'simulator-1',
+              groupId: visibleGroupId,
+              worktreeId: WT,
+              contentType: 'simulator',
+              label: 'Simulator'
+            }),
+            makeUnifiedTab({
+              id: terminalId,
+              entityId: terminalId,
+              groupId: hiddenGroupId,
+              worktreeId: WT,
+              label: 'Claude'
+            })
+          ]
+        },
+        groupsByWorktree: {
+          [WT]: [
+            makeTabGroup({
+              id: visibleGroupId,
+              worktreeId: WT,
+              activeTabId: 'simulator-1',
+              tabOrder: ['simulator-1']
+            }),
+            makeTabGroup({ id: hiddenGroupId, worktreeId: WT })
+          ]
+        },
+        activeGroupIdByWorktree: { [WT]: visibleGroupId },
+        activeTabIdByWorktree: { [WT]: terminalId },
+        layoutByWorktree: { [WT]: { type: 'leaf', groupId: visibleGroupId } }
+      })
+
+      const result = store.getState().reconcileWorktreeTabModel(WT)
+      const state = store.getState()
+
+      expect(result.activeRenderableTabId).toBe(terminalId)
+      expect(state.unifiedTabsByWorktree[WT]).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: terminalId, groupId: visibleGroupId })
+        ])
+      )
+      expect(state.groupsByWorktree[WT]).toEqual([
+        expect.objectContaining({
+          id: visibleGroupId,
+          activeTabId: terminalId,
+          tabOrder: ['simulator-1', terminalId]
+        })
+      ])
+      expect(state.layoutByWorktree[WT]).toEqual({ type: 'leaf', groupId: visibleGroupId })
+    })
+
+    it('activates a recovered tab in another visible group without changing the split layout', () => {
+      const firstTerminalId = 'terminal-first'
+      const recoveredTerminalId = 'terminal-recovered'
+      const firstGroupId = 'g-first'
+      const recoveredGroupId = 'g-recovered'
+      const splitLayout = {
+        type: 'split' as const,
+        direction: 'horizontal' as const,
+        first: { type: 'leaf' as const, groupId: firstGroupId },
+        second: { type: 'leaf' as const, groupId: recoveredGroupId }
+      }
+
+      store.setState({
+        tabsByWorktree: {
+          [WT]: [
+            makeTab({ id: firstTerminalId, ptyId: 'pty-first', worktreeId: WT }),
+            makeTab({ id: recoveredTerminalId, ptyId: 'pty-recovered', worktreeId: WT })
+          ]
+        },
+        ptyIdsByTabId: {
+          [firstTerminalId]: ['pty-first'],
+          [recoveredTerminalId]: ['pty-recovered']
+        },
+        unifiedTabsByWorktree: {
+          [WT]: [
+            makeUnifiedTab({
+              id: firstTerminalId,
+              entityId: firstTerminalId,
+              groupId: firstGroupId,
+              worktreeId: WT
+            }),
+            makeUnifiedTab({
+              id: recoveredTerminalId,
+              entityId: recoveredTerminalId,
+              groupId: recoveredGroupId,
+              worktreeId: WT
+            })
+          ]
+        },
+        groupsByWorktree: {
+          [WT]: [
+            makeTabGroup({
+              id: firstGroupId,
+              worktreeId: WT,
+              activeTabId: firstTerminalId,
+              tabOrder: [firstTerminalId]
+            }),
+            makeTabGroup({ id: recoveredGroupId, worktreeId: WT })
+          ]
+        },
+        activeGroupIdByWorktree: { [WT]: firstGroupId },
+        activeTabIdByWorktree: { [WT]: recoveredTerminalId },
+        layoutByWorktree: { [WT]: splitLayout }
+      })
+
+      const result = store.getState().reconcileWorktreeTabModel(WT)
+      const state = store.getState()
+
+      expect(result.activeRenderableTabId).toBe(recoveredTerminalId)
+      expect(state.activeGroupIdByWorktree[WT]).toBe(recoveredGroupId)
+      expect(state.groupsByWorktree[WT]).toEqual([
+        expect.objectContaining({
+          id: firstGroupId,
+          activeTabId: firstTerminalId,
+          tabOrder: [firstTerminalId]
+        }),
+        expect.objectContaining({
+          id: recoveredGroupId,
+          activeTabId: recoveredTerminalId,
+          tabOrder: [recoveredTerminalId]
+        })
+      ])
+      expect(state.layoutByWorktree[WT]).toEqual(splitLayout)
     })
 
     it('promotes legacy terminals to the worktree remembered tab, not always the first one', () => {
