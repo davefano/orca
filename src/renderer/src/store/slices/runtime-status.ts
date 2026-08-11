@@ -9,8 +9,14 @@ import {
   unwrapRuntimeRpcResult
 } from '@/runtime/runtime-rpc-client'
 import { replaceRuntimeEnvironmentRevisions } from '@/runtime/runtime-environment-revision'
+import {
+  advanceRuntimeEnvironmentConnectionGeneration,
+  retireRuntimeEnvironmentConnectionGeneration
+} from '@/runtime/runtime-environment-connection-generation'
 import { translate } from '@/i18n/i18n'
 import { bumpProviderRuntimeSessionGeneration } from '@/lib/provider-runtime-context'
+
+export { getRuntimeEnvironmentConnectionGeneration } from '@/runtime/runtime-environment-connection-generation'
 
 /** Live status for one saved runtime environment, as last observed by the
  * renderer. `status === null` records a probe that failed or timed out so the
@@ -63,7 +69,6 @@ export type RuntimeStatusSlice = {
   hydrateRuntimeEnvironmentStatuses: () => Promise<void>
 }
 
-const connectionGenerationByEnvironment = new Map<string, number>()
 const activeRuntimeDisconnectedToasts = new Map<string, symbol>()
 const RUNTIME_DISCONNECTED_TOAST_DURATION_MS = 4_000
 
@@ -144,16 +149,6 @@ function dismissRuntimeDisconnectedToast(environmentId: string): void {
   toast.dismiss?.(toastId)
 }
 
-export function getRuntimeEnvironmentConnectionGeneration(environmentId: string): number {
-  return connectionGenerationByEnvironment.get(environmentId) ?? 0
-}
-
-function advanceRuntimeEnvironmentConnectionGeneration(environmentId: string): number {
-  const next = getRuntimeEnvironmentConnectionGeneration(environmentId) + 1
-  connectionGenerationByEnvironment.set(environmentId, next)
-  return next
-}
-
 export const createRuntimeStatusSlice: StateCreator<AppState, [], [], RuntimeStatusSlice> = (
   set,
   get
@@ -196,6 +191,7 @@ export const createRuntimeStatusSlice: StateCreator<AppState, [], [], RuntimeSta
         if (!keep.has(id)) {
           nextStatuses.delete(id)
           advanceRuntimeEnvironmentConnectionGeneration(id)
+          retireRuntimeEnvironmentConnectionGeneration(id)
           statusesChanged = true
         }
       }
@@ -204,6 +200,7 @@ export const createRuntimeStatusSlice: StateCreator<AppState, [], [], RuntimeSta
           statusesChanged = true
         }
         advanceRuntimeEnvironmentConnectionGeneration(id)
+        retireRuntimeEnvironmentConnectionGeneration(id)
       }
       // Add just-removed ids as tombstones and clear any that were re-added, so an
       // in-flight catalog merge for a removed env can be dropped without mistaking a
@@ -261,9 +258,12 @@ export const createRuntimeStatusSlice: StateCreator<AppState, [], [], RuntimeSta
       const sessionEnded = status.status === null && previous?.status != null
       const connectionChanged =
         status.status !== null &&
-        (previous?.status == null || previous.status.runtimeId !== status.status.runtimeId)
+        (previous === undefined ||
+          (previous.status === null
+            ? (previous.connectionGeneration ?? 0) === 0
+            : previous.status.runtimeId !== status.status.runtimeId))
       const activeEnvironmentId = s.settings?.activeRuntimeEnvironmentId?.trim()
-      if (connectionChanged) {
+      if (sessionEnded || connectionChanged) {
         advanceRuntimeEnvironmentConnectionGeneration(environmentId)
       }
       if (activeEnvironmentId === environmentId && (sessionEnded || connectionChanged)) {
@@ -271,9 +271,10 @@ export const createRuntimeStatusSlice: StateCreator<AppState, [], [], RuntimeSta
       }
       next.set(environmentId, {
         ...status,
-        connectionGeneration: connectionChanged
-          ? (previous?.connectionGeneration ?? 0) + 1
-          : (previous?.connectionGeneration ?? status.connectionGeneration ?? 0)
+        connectionGeneration:
+          sessionEnded || connectionChanged
+            ? (previous?.connectionGeneration ?? 0) + 1
+            : (previous?.connectionGeneration ?? status.connectionGeneration ?? 0)
       })
       return { runtimeStatusByEnvironmentId: next }
     })

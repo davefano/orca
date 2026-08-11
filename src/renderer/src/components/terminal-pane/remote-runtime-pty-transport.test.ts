@@ -4980,6 +4980,56 @@ describe('createRemoteRuntimePtyTransport', () => {
     await vi.waitFor(() => expect(runtimeSubscribe).toHaveBeenCalledTimes(2))
   })
 
+  it('warmly refreshes a retained pane attachment without replacing its host PTY', async () => {
+    const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
+    const { advanceRuntimeEnvironmentConnectionGeneration } =
+      await import('@/runtime/runtime-environment-connection-generation')
+    const transport = createRemoteRuntimePtyTransport('env-1', {
+      worktreeId: 'wt-1',
+      tabId: 'tab-1',
+      leafId: 'pane:1'
+    })
+
+    await transport.connect({ url: '', callbacks: {} })
+    await vi.waitFor(() => expect(subscribedTerminalHandles()).toHaveLength(1))
+    const firstStreamId = latestSubscribePayload().streamId
+    emitSnapshot(firstStreamId, 'initial state')
+    await vi.waitFor(() => expect(transport.isConnected()).toBe(true))
+
+    expect(transport.needsAttachmentRefresh?.()).toBe(false)
+    advanceRuntimeEnvironmentConnectionGeneration('env-1')
+    expect(transport.needsAttachmentRefresh?.()).toBe(true)
+    runtimeSubscribe.mockImplementationOnce(
+      async (_args: unknown, callbacks: typeof subscriptionCallbacks) => {
+        subscriptionCallbacks = callbacks
+        return { unsubscribe: vi.fn(), sendBinary: subscriptionSendBinary }
+      }
+    )
+    expect(transport.refreshAttachment?.()).toBe(true)
+    expect(transport.refreshAttachment?.()).toBe(true)
+    expect(transport.isConnected()).toBe(true)
+    await vi.waitFor(() => expect(runtimeSubscribe).toHaveBeenCalledTimes(2))
+    runtimeCall.mockClear()
+    expect(transport.sendInputImmediate('generation-fallback')).toBe(true)
+    await vi.waitFor(() =>
+      expect(runtimeCall).toHaveBeenCalledWith(expect.objectContaining({ method: 'terminal.send' }))
+    )
+    emitMultiplexReady()
+    await vi.waitFor(() => expect(subscribedTerminalHandles()).toHaveLength(2))
+    runtimeCall.mockClear()
+    expect(transport.sendInputImmediate('pre-snapshot-fallback')).toBe(true)
+    await vi.waitFor(() =>
+      expect(runtimeCall).toHaveBeenCalledWith(expect.objectContaining({ method: 'terminal.send' }))
+    )
+    expect(subscribedTerminalHandles()).toEqual(['terminal-1', 'terminal-1'])
+    expect(transport.getPtyId()).toBe('remote:env-1@@terminal-1')
+
+    const replacementStreamId = latestSubscribePayload().streamId
+    emitSnapshot(replacementStreamId, 'replacement state')
+    await vi.waitFor(() => expect(transport.isConnected()).toBe(true))
+    await vi.waitFor(() => expect(transport.needsAttachmentRefresh?.()).toBe(false))
+  })
+
   it('reapplies negotiated output pause across reconnect and resumes exact snapshot plus live data', async () => {
     const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
     const onReplayData = vi.fn()

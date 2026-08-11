@@ -19,6 +19,7 @@ import { recordRendererCrashBreadcrumb } from '@/lib/crash-breadcrumb-recorder'
 import { deliverTerminalDataWithDeferredCredit } from '@/lib/pane-manager/terminal-delivery-credit'
 import { unwrapRuntimeRpcResult } from './runtime-rpc-client'
 import { getRuntimeEnvironmentRevision } from './runtime-environment-revision'
+import { getRuntimeEnvironmentConnectionGeneration } from './runtime-environment-connection-generation'
 import {
   TERMINAL_MULTIPLEX_ACK_BATCH_BYTES,
   TERMINAL_MULTIPLEX_ACK_FLUSH_MS,
@@ -373,14 +374,18 @@ class RemoteRuntimeTerminalMultiplexer {
   constructor(
     private readonly environmentId: string,
     private readonly environmentRevision: number | undefined,
+    private readonly connectionGeneration: number,
     private readonly releaseIfCurrent: (
       environmentId: string,
       multiplexer: RemoteRuntimeTerminalMultiplexer
     ) => void
   ) {}
 
-  matchesCurrentEnvironmentRevision(): boolean {
-    return getRuntimeEnvironmentRevision(this.environmentId) === this.environmentRevision
+  matchesCurrentEnvironment(): boolean {
+    return (
+      getRuntimeEnvironmentRevision(this.environmentId) === this.environmentRevision &&
+      getRuntimeEnvironmentConnectionGeneration(this.environmentId) === this.connectionGeneration
+    )
   }
 
   closeForEnvironmentReplacement(): void {
@@ -597,7 +602,7 @@ class RemoteRuntimeTerminalMultiplexer {
   }
 
   private handleResponse(response: RuntimeRpcResponse<unknown>): void {
-    if (!this.matchesCurrentEnvironmentRevision()) {
+    if (!this.matchesCurrentEnvironment()) {
       this.closeForEnvironmentReplacement()
       return
     }
@@ -707,7 +712,7 @@ class RemoteRuntimeTerminalMultiplexer {
   }
 
   private handleBinary(bytes: Uint8Array<ArrayBufferLike>): void {
-    if (!this.matchesCurrentEnvironmentRevision()) {
+    if (!this.matchesCurrentEnvironment()) {
       this.closeForEnvironmentReplacement()
       return
     }
@@ -1340,7 +1345,7 @@ class RemoteRuntimeTerminalMultiplexer {
     opcode: TerminalStreamOpcode,
     payload: Uint8Array<ArrayBufferLike> = new Uint8Array()
   ): boolean {
-    if (!this.matchesCurrentEnvironmentRevision() || !this.ready || !this.subscription) {
+    if (!this.matchesCurrentEnvironment() || !this.ready || !this.subscription) {
       return false
     }
     try {
@@ -1431,7 +1436,7 @@ export function getRemoteRuntimeTerminalMultiplexer(
 ): RemoteRuntimeTerminalMultiplexer {
   exposeE2eRemoteTerminalMultiplexAckGate()
   let multiplexer = multiplexers.get(environmentId)
-  if (multiplexer && !multiplexer.matchesCurrentEnvironmentRevision()) {
+  if (multiplexer && !multiplexer.matchesCurrentEnvironment()) {
     multiplexer.closeForEnvironmentReplacement()
     multiplexer = undefined
   }
@@ -1439,6 +1444,7 @@ export function getRemoteRuntimeTerminalMultiplexer(
     multiplexer = new RemoteRuntimeTerminalMultiplexer(
       environmentId,
       getRuntimeEnvironmentRevision(environmentId),
+      getRuntimeEnvironmentConnectionGeneration(environmentId),
       releaseRemoteRuntimeTerminalMultiplexer
     )
     multiplexers.set(environmentId, multiplexer)

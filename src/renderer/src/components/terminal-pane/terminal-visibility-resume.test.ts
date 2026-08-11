@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PaneManager } from '@/lib/pane-manager/pane-manager'
 import {
+  refreshRevealedTerminalAttachments,
   recoverVisibleTerminalWindowWake,
   resumeTerminalVisibility
 } from './terminal-visibility-resume'
@@ -60,6 +61,50 @@ function resumeArgs(manager: FakeManager, shouldUseLightTabResume: boolean) {
     withSuppressedScrollTracking: (callback: () => void) => callback()
   }
 }
+
+describe('refreshRevealedTerminalAttachments', () => {
+  it('refreshes every retained transport after a surface reveal', () => {
+    const first = vi.fn()
+    const second = vi.fn()
+    refreshRevealedTerminalAttachments(
+      new Map([
+        [1, { refreshAttachment: first }],
+        [2, { refreshAttachment: second }]
+      ]) as never,
+      'surface'
+    )
+
+    expect(first).toHaveBeenCalledTimes(1)
+    expect(second).toHaveBeenCalledTimes(1)
+  })
+
+  it('refreshes only stale or recovering transports after a tab reveal', () => {
+    const stale = vi.fn()
+    const fresh = vi.fn()
+    const legacyRecovering = vi.fn()
+    const legacyConnected = vi.fn()
+    refreshRevealedTerminalAttachments(
+      new Map([
+        [1, { refreshAttachment: stale, needsAttachmentRefresh: () => true }],
+        [2, { refreshAttachment: fresh, needsAttachmentRefresh: () => false }],
+        [
+          3,
+          { refreshAttachment: legacyRecovering, getRecoveryState: () => ({ phase: 'recovering' }) }
+        ],
+        [
+          4,
+          { refreshAttachment: legacyConnected, getRecoveryState: () => ({ phase: 'connected' }) }
+        ]
+      ]) as never,
+      'tab'
+    )
+
+    expect(stale).toHaveBeenCalledTimes(1)
+    expect(fresh).not.toHaveBeenCalled()
+    expect(legacyRecovering).toHaveBeenCalledTimes(1)
+    expect(legacyConnected).not.toHaveBeenCalled()
+  })
+})
 
 describe('resumeTerminalVisibility reveal repaint', () => {
   beforeEach(() => {

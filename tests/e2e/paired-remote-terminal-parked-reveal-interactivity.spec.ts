@@ -36,7 +36,7 @@ import {
   type PairedElectronClient
 } from './helpers/paired-electron-client'
 import { focusActiveTerminalInput } from './helpers/terminal'
-import { waitForTabParked } from './helpers/terminal-hidden-parking'
+import { worktreeRowSurface } from './worktree-row-locators'
 
 const PARK_DELAY_MS = 2_000
 const LIVE_PAINT_BUDGET_MS = 12_000
@@ -273,12 +273,16 @@ async function probeInteractivity(
   worktreeId: string,
   target: HostTerminal,
   flipTo: HostTerminal,
-  name: string
+  name: string,
+  options: { flipWorktreeId?: string; focusInput?: boolean } = {}
 ): Promise<ScenarioResult> {
+  const { flipWorktreeId = worktreeId, focusInput = true } = options
   const token = `probe-${name}`
   // Why: a human types once the pane looks restored; typing earlier would race the reattach.
   const restoredBuffer = await waitForPaneMarker(page, target.webTabId, 'READY:', REVEAL_BUDGET_MS)
-  await focusActiveTerminalInput(page)
+  if (focusInput) {
+    await focusActiveTerminalInput(page)
+  }
   await page.keyboard.type(token)
   await page.keyboard.press('Enter')
   const paintedLive = await waitForPaneMarker(
@@ -291,7 +295,7 @@ async function probeInteractivity(
   const diagnostics = await readPaneDiagnostics(page, worktreeId, target.webTabId)
   let paintedAfterFlip = paintedLive
   if (!paintedLive) {
-    await openClientTab(page, worktreeId, flipTo.webTabId)
+    await openClientTab(page, flipWorktreeId, flipTo.webTabId)
     await openClientTab(page, worktreeId, target.webTabId)
     paintedAfterFlip = await waitForPaneMarker(
       page,
@@ -402,50 +406,59 @@ test('paired client keeps revealed remote terminals interactive', async ({
       )
     }
 
-    // S2 — cold-parked tab (renderer unmounted), then revealed.
+    // S2 — a retained paired terminal must repaint and accept input after a cross-worktree reveal.
     {
-      const { target, decoys } = await seedScenario(client, worktreeId)
-      createdTerminals.push(target.terminal, ...decoys.map((decoy) => decoy.terminal))
-      await openClientTab(client.page, worktreeId, decoys[0].webTabId)
-      await openClientTab(client.page, worktreeId, decoys[1].webTabId)
-      await waitForTabParked(client.page, target.webTabId, { parkDelayMs: PARK_DELAY_MS })
-      await expectStillMounted(client.page, decoys[1].webTabId, 'cold-parked flip decoy')
-      await openClientTab(client.page, worktreeId, target.webTabId)
-      results.push(
-        logResult(
-          await probeInteractivity(client.page, worktreeId, target, decoys[1], 'cold-parked')
-        )
+      const otherWorktreeId = await client.page.evaluate(
+        (activeId) =>
+          window.__store
+            ?.getState()
+            .allWorktrees()
+            .find((worktree) => worktree.id !== activeId)?.id ?? null,
+        worktreeId
       )
-    }
-
-    // S3 — cold-parked tab whose runtime connection dropped and came back
-    // while parked (the "returned after a while" report).
-    {
+      if (!otherWorktreeId) {
+        throw new Error('paired client needs a second worktree for the sidebar-switch oracle')
+      }
       const { target, decoys } = await seedScenario(client, worktreeId)
-      createdTerminals.push(target.terminal, ...decoys.map((decoy) => decoy.terminal))
-      await openClientTab(client.page, worktreeId, decoys[0].webTabId)
-      await openClientTab(client.page, worktreeId, decoys[1].webTabId)
-      await waitForTabParked(client.page, target.webTabId, { parkDelayMs: PARK_DELAY_MS })
-      await client.page.evaluate(async (selector) => {
-        await window.api.runtimeEnvironments.disconnect({ selector })
-      }, client.environmentId)
+      const other = await createHostTerminal(client.page, client.environmentId, otherWorktreeId)
+      createdTerminals.push(
+        target.terminal,
+        other.terminal,
+        ...decoys.map((decoy) => decoy.terminal)
+      )
+      await openClientTab(client.page, otherWorktreeId, other.webTabId)
       await expect
-        .poll(
-          async () =>
-            client.page.evaluate(async (selector) => {
-              const response = await window.api.runtimeEnvironments.connect({ selector })
-              return response.ok
-            }, client.environmentId),
-          { timeout: 60_000, message: 'paired client never reconnected to the host runtime' }
-        )
-        .toBe(true)
-      await expectStillMounted(client.page, decoys[1].webTabId, 'reconnect-parked flip decoy')
+        .poll(() => readPaneContent(client.page, other.webTabId), {
+          timeout: 60_000,
+          message: 'other-worktree terminal never painted its READY marker'
+        })
+        .toContain('READY:')
       await openClientTab(client.page, worktreeId, target.webTabId)
-      results.push(
-        logResult(
-          await probeInteractivity(client.page, worktreeId, target, decoys[1], 'reconnect-parked')
+      for (let cycle = 1; cycle <= 8; cycle += 1) {
+        await worktreeRowSurface(client.page, otherWorktreeId).click()
+        await expect(client.page.locator('[data-rendered-active-worktree-id]')).toHaveAttribute(
+          'data-rendered-active-worktree-id',
+          otherWorktreeId
         )
-      )
+        await expectStillMounted(client.page, target.webTabId, 'cross-worktree retained target')
+        await worktreeRowSurface(client.page, worktreeId).click()
+        await expect(client.page.locator('[data-rendered-active-worktree-id]')).toHaveAttribute(
+          'data-rendered-active-worktree-id',
+          worktreeId
+        )
+        results.push(
+          logResult(
+            await probeInteractivity(
+              client.page,
+              worktreeId,
+              target,
+              other,
+              `cross-worktree-retained-${cycle}`,
+              { flipWorktreeId: otherWorktreeId, focusInput: false }
+            )
+          )
+        )
+      }
     }
 
     for (const result of results) {

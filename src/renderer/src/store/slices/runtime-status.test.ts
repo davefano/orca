@@ -14,6 +14,10 @@ import {
   getRuntimeEnvironmentConnectionGeneration
 } from './runtime-status'
 import { getProviderRuntimeContextKey } from '@/lib/provider-runtime-context'
+import {
+  getRuntimeEnvironmentConnectionGenerationCountForTests,
+  resetRuntimeEnvironmentConnectionGenerationsForTests
+} from '@/runtime/runtime-environment-connection-generation'
 
 vi.mock('sonner', () => ({
   toast: { warning: vi.fn(), dismiss: vi.fn() }
@@ -74,6 +78,7 @@ function stubRuntimeEnvironmentApi({
 }
 
 beforeEach(() => {
+  resetRuntimeEnvironmentConnectionGenerationsForTests()
   vi.mocked(toast.warning).mockReset()
   vi.mocked(toast.dismiss).mockReset()
 })
@@ -115,6 +120,7 @@ describe('runtime-status slice', () => {
     expect(store.getState().runtimeEnvironmentCatalogHydrated).toBe(true)
     expect(store.getState().runtimeStatusByEnvironmentId.has('keep')).toBe(true)
     expect(store.getState().runtimeStatusByEnvironmentId.has('drop')).toBe(false)
+    expect(getRuntimeEnvironmentConnectionGenerationCountForTests()).toBe(1)
   })
 
   it('drops old status and advances generation when the same environment id is re-paired', () => {
@@ -168,7 +174,7 @@ describe('runtime-status slice', () => {
 
     const map = store.getState().runtimeStatusByEnvironmentId
     expect(map.size).toBe(1)
-    expect(map.get('env-a')).toEqual({ status: null, checkedAt: 5, connectionGeneration: 1 })
+    expect(map.get('env-a')).toEqual({ status: null, checkedAt: 5, connectionGeneration: 2 })
   })
 
   it('does not toast when the first probe finds a saved server offline', () => {
@@ -372,6 +378,7 @@ describe('runtime-status slice', () => {
     expect(store.getState().runtimeStatusByEnvironmentId.get('env-a')?.connectionGeneration).toBe(1)
 
     store.getState().setRuntimeEnvironmentStatus('env-a', { status: null, checkedAt: 3 })
+    expect(store.getState().runtimeStatusByEnvironmentId.get('env-a')?.connectionGeneration).toBe(2)
     store.getState().setRuntimeEnvironmentStatus('env-a', {
       status: makeStatus({ runtimeId: 'runtime-a' }),
       checkedAt: 4

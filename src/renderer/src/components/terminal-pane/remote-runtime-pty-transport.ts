@@ -83,6 +83,8 @@ import {
   ptyShutdownLifecycleHandlers
 } from './pty-shutdown-data-suspension'
 import { getRuntimeEnvironmentRevision } from '@/runtime/runtime-environment-revision'
+import { getRuntimeEnvironmentConnectionGeneration } from '@/runtime/runtime-environment-connection-generation'
+import { createRemoteRuntimeAttachmentRefreshController } from './remote-runtime-attachment-refresh'
 
 const REMOTE_TERMINAL_INPUT_FLUSH_MS = 8
 const REMOTE_TERMINAL_VIEWPORT_FLUSH_MS = 33
@@ -282,6 +284,29 @@ export function createRemoteRuntimePtyTransport(
   let recoveringPaneHandle: string | null = null
   const getRecoveryReplacementPolicy = (targetHandle: string): HostHandleReplacementPolicy =>
     recoveryReplacementPolicyHandle === targetHandle ? recoveryReplacementPolicy : 'reuse'
+  const attachmentRefreshController = createRemoteRuntimeAttachmentRefreshController({
+    beginRecovery: () => recovery.begin(),
+    cancelRecovery: () => recovery.cancel(),
+    getConnectionGeneration: () =>
+      getRuntimeEnvironmentConnectionGeneration(currentRuntimeEnvironmentId),
+    getRecoveryPhase: () => recovery.currentPhase,
+    getReplacementPolicy: getRecoveryReplacementPolicy,
+    getState: () => ({
+      attachmentReady,
+      connected,
+      destroyed,
+      handle,
+      remotePtyId,
+      terminalEnded
+    }),
+    handleError: handleRemoteTerminalError,
+    isRecoveryActive: () => recovery.isActive,
+    recoverAfterSubscribeFailure,
+    retryRecoveryNow: () => recovery.retryNow(),
+    scheduleResubscribe: scheduleResubscribeAfterTransportClose,
+    subscribe: (onSubscribed) =>
+      subscribeToHandle({ onSubscribed, preserveAttachmentDuringRefresh: true })
+  })
   const resetRecoveryReplacementPolicy = (): void => {
     recoveryReplacementPolicy = 'reuse'
     recoveryReplacementPolicyHandle = null
@@ -1335,6 +1360,12 @@ export function createRemoteRuntimePtyTransport(
   function getCurrentMultiplexedStream(
     targetHandle: string
   ): RemoteRuntimeMultiplexedTerminal | null {
+    if (attachmentRefreshController.requiresRpcFallback()) {
+      return null
+    }
+    // A healthy same-generation reveal keeps using the installed stream until
+    // its replacement attaches. A retired generation uses the one-shot RPC
+    // fallback above so input cannot enter the stale stream.
     return multiplexedStreamHandle === targetHandle ? multiplexedStream : null
   }
 
@@ -1434,7 +1465,10 @@ export function createRemoteRuntimePtyTransport(
           const reattachEpoch = recovery.begin()
           clearPublishedHandleWait()
           const reusedPtyId = remotePtyId
-          void subscribeToHandle(reattachEpoch, true).catch((error) => {
+          void subscribeToHandle({
+            expectedRecoveryEpoch: reattachEpoch,
+            sameHandleEndRecovery: true
+          }).catch((error) => {
             if (!recoverAfterSubscribeFailure(error, previousHandle, reusedPtyId)) {
               handleRemoteTerminalError(error)
             }
@@ -1584,10 +1618,11 @@ export function createRemoteRuntimePtyTransport(
         rebindRemoteTerminalHandle(nextHandle)
       }
       clearPublishedHandleWait()
-      await subscribeToHandle(
-        recoveryEpoch,
-        nextHandle === previousHandle && effectivePolicy === 'prefer-replacement'
-      )
+      await subscribeToHandle({
+        expectedRecoveryEpoch: recoveryEpoch,
+        sameHandleEndRecovery:
+          nextHandle === previousHandle && effectivePolicy === 'prefer-replacement'
+      })
       return
     } else if (tabId && leafId && worktreeId) {
       const resolved = await resolvePersistedHostPane()
@@ -1610,7 +1645,7 @@ export function createRemoteRuntimePtyTransport(
       }
     }
     clearPublishedHandleWait()
-    await subscribeToHandle(recoveryEpoch)
+    await subscribeToHandle({ expectedRecoveryEpoch: recoveryEpoch })
   }
 
   function scheduleResubscribeAfterTransportClose(
@@ -1723,16 +1758,28 @@ export function createRemoteRuntimePtyTransport(
   }
 
   async function subscribeToHandle(
-    expectedRecoveryEpoch?: number,
-    sameHandleEndRecovery = false
+    options: {
+      expectedRecoveryEpoch?: number
+      onSubscribed?: () => void
+      sameHandleEndRecovery?: boolean
+      preserveAttachmentDuringRefresh?: boolean
+    } = {}
   ): Promise<void> {
+    const {
+      expectedRecoveryEpoch,
+      onSubscribed,
+      sameHandleEndRecovery = false,
+      preserveAttachmentDuringRefresh = false
+    } = options
     if (!handle) {
       return
     }
     const subscribedHandle = handle
     const subscribedPtyId = remotePtyId
     const generation = ++subscriptionGeneration
-    setAttachmentReady(false)
+    if (!preserveAttachmentDuringRefresh) {
+      setAttachmentReady(false)
+    }
     let transportClosed = false
     let subscriptionAttached = false
     // Why: viewport handed to subscribe; a resize during the round-trip falls back to the refresh-only one-shot RPC, replayed through the stream below once current.
@@ -1796,6 +1843,7 @@ export function createRemoteRuntimePtyTransport(
           connecting = false
           resetRecoveryReplacementPolicy()
           markRecoveryHealthy()
+          onSubscribed?.()
           emitRecoveryState()
           storedCallbacks.onConnect?.()
           storedCallbacks.onStatus?.('shell')
@@ -2418,6 +2466,14 @@ export function createRemoteRuntimePtyTransport(
     },
 
     getRecoveryState,
+
+    needsAttachmentRefresh() {
+      return attachmentRefreshController.needsRefresh()
+    },
+
+    refreshAttachment() {
+      return attachmentRefreshController.refresh()
+    },
 
     // Why: dedup exists to stop one outage spamming the surface; once the user dismisses it, the next occurrence is new information again.
     notifyErrorSurfaceDismissed() {

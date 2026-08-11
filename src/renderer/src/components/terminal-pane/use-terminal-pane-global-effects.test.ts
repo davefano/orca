@@ -274,9 +274,8 @@ describe('useTerminalPaneGlobalEffects', () => {
     })
     mocks.fitAndFocusPanes.mockImplementation(() => order.push('fit-focus'))
 
-    // Why: the resume path resets atlases through the live-manager registry
-    // (shared glyph atlas), so the fake manager must be registered to observe
-    // its reset in the ordering assertion.
+    // Why: keep the fake manager registered so the test also proves ordinary
+    // visibility resumes do not trigger a shared glyph-atlas reset.
     registerManagerForReset(manager)
     const isActiveRef = { current: false }
     const isVisibleRef = { current: false }
@@ -307,10 +306,10 @@ describe('useTerminalPaneGlobalEffects', () => {
       'fit-reveal',
       'intent:terminal-a',
       'intent:terminal-b',
-      'reset-atlas',
-      'refresh',
       'reveal-repaint'
     ])
+    expect(manager.resetWebglTextureAtlases).not.toHaveBeenCalled()
+    expect(manager.refreshAllPanes).not.toHaveBeenCalled()
     expect(mocks.restoreScrollStateAfterLayout).not.toHaveBeenCalled()
     expect(mocks.flushTerminalOutput).toHaveBeenNthCalledWith(1, terminalA, {
       maxChars: 256 * 1024
@@ -399,8 +398,8 @@ describe('useTerminalPaneGlobalEffects', () => {
     expect(manager.resumeRendering).not.toHaveBeenCalled()
     expect(mocks.fitAndFocusPanes).not.toHaveBeenCalled()
     expect(mocks.fitPanes).not.toHaveBeenCalled()
-    expect(manager.resetWebglTextureAtlases).toHaveBeenCalledTimes(1)
-    expect(manager.refreshAllPanes).toHaveBeenCalledTimes(1)
+    expect(manager.resetWebglTextureAtlases).not.toHaveBeenCalled()
+    expect(manager.refreshAllPanes).not.toHaveBeenCalled()
     expect(mocks.focusActivePane).toHaveBeenCalledWith(manager)
     vi.advanceTimersByTime(500)
   })
@@ -471,8 +470,8 @@ describe('useTerminalPaneGlobalEffects', () => {
     expect(manager.resumeRendering).not.toHaveBeenCalled()
     expect(mocks.fitAndFocusPanes).not.toHaveBeenCalled()
     expect(mocks.fitPanes).not.toHaveBeenCalled()
-    expect(manager.resetWebglTextureAtlases).toHaveBeenCalledTimes(1)
-    expect(manager.refreshAllPanes).toHaveBeenCalledTimes(1)
+    expect(manager.resetWebglTextureAtlases).not.toHaveBeenCalled()
+    expect(manager.refreshAllPanes).not.toHaveBeenCalled()
     expect(mocks.focusActivePane).toHaveBeenCalledWith(manager)
     vi.advanceTimersByTime(500)
   })
@@ -535,6 +534,7 @@ describe('useTerminalPaneGlobalEffects', () => {
 
   it('suspends a tab-hidden terminal when its worktree surface becomes hidden', () => {
     const terminal = { name: 'terminal-a' }
+    const refreshAttachment = vi.fn()
     const manager = {
       getPanes: vi.fn(() => [{ id: 1, terminal }]),
       resumeRendering: vi.fn(),
@@ -554,7 +554,9 @@ describe('useTerminalPaneGlobalEffects', () => {
       worktreeId: 'wt-1',
       managerRef: { current: manager as never },
       containerRef: { current: null },
-      paneTransportsRef: { current: new Map() },
+      paneTransportsRef: {
+        current: new Map([[1, { refreshAttachment, getPtyId: () => 'remote:pty-1' }]]) as never
+      },
       isActiveRef: { current: false },
       isVisibleRef: { current: false },
       paneCount: 1,
@@ -580,6 +582,7 @@ describe('useTerminalPaneGlobalEffects', () => {
       isWorktreeActive: true
     })
     expect(manager.suspendRendering).not.toHaveBeenCalled()
+    expect(refreshAttachment).not.toHaveBeenCalled()
 
     beginHookRender()
     useTerminalPaneGlobalEffects({
@@ -611,13 +614,14 @@ describe('useTerminalPaneGlobalEffects', () => {
     expect(mocks.requestTerminalBacklogRecovery).toHaveBeenCalledWith(terminal)
     expect(mocks.flushTerminalOutput).toHaveBeenCalledWith(terminal, { maxChars: 256 * 1024 })
     expect(manager.resumeRendering).toHaveBeenCalledTimes(1)
+    expect(refreshAttachment).toHaveBeenCalledTimes(1)
     // Reveal must route through fitAllRevealedPanes, never the sync fitAllPanes.
     expect(manager.fitAllRevealedPanes).toHaveBeenCalledTimes(1)
     expect(manager.fitAllPanes).not.toHaveBeenCalled()
     expect(mocks.focusActivePane).toHaveBeenCalledWith(manager)
     expect(mocks.fitAndFocusPanes).not.toHaveBeenCalled()
-    expect(manager.resetWebglTextureAtlases).toHaveBeenCalledTimes(1)
-    expect(manager.refreshAllPanes).toHaveBeenCalledTimes(1)
+    expect(manager.resetWebglTextureAtlases).not.toHaveBeenCalled()
+    expect(manager.refreshAllPanes).not.toHaveBeenCalled()
   })
 
   function seedActiveLeafPty(tabId: string, activeLeafId: string, ptyId: string): void {

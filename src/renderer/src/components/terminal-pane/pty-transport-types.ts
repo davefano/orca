@@ -160,6 +160,10 @@ export type PtyTransport = {
   ) => boolean
   isConnected: () => boolean
   getRecoveryState?: () => PtyTransportRecoveryState
+  /** Replaces a paired-runtime view subscription without replacing its live host PTY. */
+  refreshAttachment?: () => boolean
+  /** True when the installed view belongs to a retired runtime connection. */
+  needsAttachmentRefresh?: () => boolean
   /** Starts a fresh connection epoch while preserving the authoritative remote PTY identity. */
   retryRecovery?: () => boolean
   /** The user dismissed the error surface; the next occurrence of the same message must surface again. */

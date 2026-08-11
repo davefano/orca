@@ -18,6 +18,7 @@ import { useTerminalContainerFitSync } from './use-terminal-container-fit-sync'
 import { handleTerminalProgrammaticTextPaste } from './terminal-programmatic-text-paste'
 import {
   hideTerminalVisibility,
+  refreshRevealedTerminalAttachments,
   resumeTerminalVisibility,
   type TerminalHiddenReason
 } from './terminal-visibility-resume'
@@ -148,6 +149,8 @@ export function useTerminalPaneGlobalEffects({
     isActiveRef.current = isActive
     isVisibleRef.current = rendererVisible
     if (rendererVisible) {
+      const hiddenReason = hiddenReasonRef.current
+      refreshRevealedTerminalAttachments(paneTransportsRef.current, hiddenReason)
       const shouldUseLightTabResume =
         isWorktreeActive &&
         hasCompletedVisibleResumeRef.current &&

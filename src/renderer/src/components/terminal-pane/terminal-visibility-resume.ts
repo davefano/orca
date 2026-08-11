@@ -14,11 +14,28 @@ import {
   resetTerminalLinkifierHoverState
 } from '@/lib/pane-manager/terminal-linkifier-hover-reset'
 import { focusActivePane } from './pane-helpers'
+import type { PtyTransport } from './pty-transport'
 
 const VISIBLE_RESUME_FLUSH_CHARS = 256 * 1024
 const WINDOW_WAKE_FLUSH_CHARS = 64 * 1024
 
 export type TerminalHiddenReason = 'surface' | 'tab'
+
+export function refreshRevealedTerminalAttachments(
+  paneTransports: ReadonlyMap<number, PtyTransport>,
+  hiddenReason: TerminalHiddenReason | null
+): void {
+  for (const transport of paneTransports.values()) {
+    const needsRefresh =
+      hiddenReason === 'surface' ||
+      (hiddenReason === 'tab' &&
+        (transport.needsAttachmentRefresh?.() ??
+          transport.getRecoveryState?.().phase !== 'connected'))
+    if (needsRefresh) {
+      transport.refreshAttachment?.()
+    }
+  }
+}
 
 type ResumeTerminalVisibilityArgs = {
   manager: PaneManager

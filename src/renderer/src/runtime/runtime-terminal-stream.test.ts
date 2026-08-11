@@ -9,8 +9,13 @@ import {
 } from '../../../shared/terminal-stream-protocol'
 import {
   _getRemoteRuntimeTerminalMultiplexerCountForTest,
+  getRemoteRuntimeTerminalMultiplexer,
   resetRemoteRuntimeTerminalMultiplexersForTests
 } from './remote-runtime-terminal-multiplexer'
+import {
+  advanceRuntimeEnvironmentConnectionGeneration,
+  resetRuntimeEnvironmentConnectionGenerationsForTests
+} from './runtime-environment-connection-generation'
 import {
   getRemoteRuntimePtyEnvironmentId,
   getRemoteRuntimeTerminalHandle,
@@ -54,6 +59,7 @@ describe('remote runtime terminal data subscriptions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     resetRemoteRuntimeTerminalMultiplexersForTests()
+    resetRuntimeEnvironmentConnectionGenerationsForTests()
     callbacks = null
     runtimeSubscribe.mockImplementation(async (_args: unknown, nextCallbacks: typeof callbacks) => {
       callbacks = nextCallbacks
@@ -72,6 +78,16 @@ describe('remote runtime terminal data subscriptions', () => {
         }
       }
     })
+  })
+
+  it('replaces a cached multiplexer after the runtime connection generation advances', () => {
+    const first = getRemoteRuntimeTerminalMultiplexer('env-1')
+
+    advanceRuntimeEnvironmentConnectionGeneration('env-1')
+    const replacement = getRemoteRuntimeTerminalMultiplexer('env-1')
+
+    expect(replacement).not.toBe(first)
+    expect(_getRemoteRuntimeTerminalMultiplexerCountForTest()).toBe(1)
   })
 
   afterEach(() => {
