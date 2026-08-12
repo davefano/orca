@@ -59,6 +59,7 @@ type MockTransport = {
   getConnectionId: ReturnType<typeof vi.fn>
   serializeBuffer?: ReturnType<typeof vi.fn>
   serializeBufferOutcome?: ReturnType<typeof vi.fn>
+  refreshAttachment?: ReturnType<typeof vi.fn>
 }
 
 const scheduleRuntimeGraphSync = vi.fn()
@@ -404,9 +405,17 @@ async function connectHiddenRemoteAgentPane(
   const capturedOutputPauseCallback: {
     current: ((paused: boolean, supported: boolean) => void) | null
   } = { current: null }
+  const capturedReplayCallback: {
+    current: ((data: string, meta?: { clearBeforeReplay?: boolean }) => void) | null
+  } = { current: null }
+  transport.refreshAttachment = vi.fn(() => {
+    queueMicrotask(() => capturedReplayCallback.current?.(`${HOST_SNAPSHOT_MARKER}\r\n`))
+    return true
+  })
   transport.connect.mockImplementation(async ({ callbacks }: { callbacks?: ConnectCallbacks }) => {
     capturedDataCallback.current = callbacks?.onData ?? null
     capturedOutputPauseCallback.current = callbacks?.onOutputPauseChanged ?? null
+    capturedReplayCallback.current = callbacks?.onReplayData ?? null
     return REMOTE_PTY_ID
   })
   transportFactoryQueue.push(transport)
@@ -670,7 +679,7 @@ describe('remote hidden-output restore outcomes', () => {
     drive.disposable.dispose()
   })
 
-  it('[modern] banners on the seventh retry-worthy host answer and never sends an eighth request', async () => {
+  it('[modern] refreshes the live attachment instead of declaring hidden output lost', async () => {
     const serializeBuffer = vi.fn()
     const serializeBufferOutcome = vi.fn().mockResolvedValue({
       availability: { kind: 'retry-worthy', cause: 'host-pending-output-overflowed' },
@@ -685,13 +694,14 @@ describe('remote hidden-output restore outcomes', () => {
     for (let expectedRequests = 2; expectedRequests <= 7; expectedRequests += 1) {
       await advanceModernRetryProbe()
       expect(serializeBufferOutcome).toHaveBeenCalledTimes(expectedRequests)
-      expect(drive.writtenChunks().join('').includes(BANNER_FRAGMENT)).toBe(expectedRequests === 7)
+      expect(drive.writtenChunks().join('')).not.toContain(BANNER_FRAGMENT)
     }
-    await vi.advanceTimersByTimeAsync(60_000)
+    expect(drive.transport.refreshAttachment).toHaveBeenCalledTimes(1)
+
     await flushAsyncTicks(20)
     expect(serializeBufferOutcome).toHaveBeenCalledTimes(7)
-    expect(drive.writtenChunks().filter((data) => data.includes(BANNER_FRAGMENT))).toHaveLength(1)
-    expect(serializeBuffer).not.toHaveBeenCalled()
+    expect(drive.writtenChunks().join('')).toContain(HOST_SNAPSHOT_MARKER)
+    expect(drive.writtenChunks().join('')).not.toContain(BANNER_FRAGMENT)
     drive.disposable.dispose()
   })
 
@@ -728,7 +738,7 @@ describe('remote hidden-output restore outcomes', () => {
     drive.disposable.dispose()
   })
 
-  it('[modern] still bounds locally-gated retries at their own cap', async () => {
+  it('[modern] refreshes the attachment when locally-gated retries reach their cap', async () => {
     const serializeBuffer = vi.fn()
     const serializeBufferOutcome = vi.fn().mockResolvedValue({
       availability: { kind: 'retry-worthy', cause: 'connection-not-ready' },
@@ -742,16 +752,17 @@ describe('remote hidden-output restore outcomes', () => {
     for (let expectedRequests = 2; expectedRequests <= 30; expectedRequests += 1) {
       await advanceModernRetryProbe()
       expect(serializeBufferOutcome).toHaveBeenCalledTimes(expectedRequests)
-      expect(drive.writtenChunks().join('').includes(BANNER_FRAGMENT)).toBe(expectedRequests === 30)
+      expect(drive.writtenChunks().join('')).not.toContain(BANNER_FRAGMENT)
     }
+    expect(drive.transport.refreshAttachment).toHaveBeenCalledTimes(1)
     await vi.advanceTimersByTimeAsync(60_000)
     await flushAsyncTicks(20)
     expect(serializeBufferOutcome).toHaveBeenCalledTimes(30)
-    expect(drive.writtenChunks().filter((data) => data.includes(BANNER_FRAGMENT))).toHaveLength(1)
+    expect(drive.writtenChunks().join('')).not.toContain(BANNER_FRAGMENT)
     drive.disposable.dispose()
   })
 
-  it('[modern] banners immediately on permanent unavailability without retrying', async () => {
+  it('[modern] refreshes immediately on snapshot-size unavailability without declaring loss', async () => {
     const serializeBuffer = vi.fn()
     const serializeBufferOutcome = vi.fn().mockResolvedValue({
       availability: {
@@ -768,7 +779,8 @@ describe('remote hidden-output restore outcomes', () => {
     await vi.advanceTimersByTimeAsync(0)
     await flushAsyncTicks(20)
     expect(serializeBufferOutcome).toHaveBeenCalledTimes(1)
-    expect(drive.writtenChunks().filter((data) => data.includes(BANNER_FRAGMENT))).toHaveLength(1)
+    expect(drive.transport.refreshAttachment).toHaveBeenCalledTimes(1)
+    expect(drive.writtenChunks().join('')).not.toContain(BANNER_FRAGMENT)
     await vi.advanceTimersByTimeAsync(60_000)
     await flushAsyncTicks(20)
     expect(serializeBufferOutcome).toHaveBeenCalledTimes(1)
@@ -776,7 +788,7 @@ describe('remote hidden-output restore outcomes', () => {
     drive.disposable.dispose()
   })
 
-  it('[modern] cancels a live flood repaint when it declares the output unrecoverable', async () => {
+  it('[modern] lets authoritative attachment replay cancel a pending flood repaint', async () => {
     const serializeBuffer = vi.fn()
     const serializeBufferOutcome = vi
       .fn()
@@ -801,12 +813,14 @@ describe('remote hidden-output restore outcomes', () => {
     drive.setOutputPaused(false)
     await flushAsyncTicks(20)
     expect(serializeBufferOutcome).toHaveBeenCalledTimes(2)
-    expect(drive.writtenChunks().filter((data) => data.includes(BANNER_FRAGMENT))).toHaveLength(1)
+    expect(drive.transport.refreshAttachment).toHaveBeenCalledTimes(1)
+    expect(drive.writtenChunks().join('')).not.toContain(BANNER_FRAGMENT)
+    await flushAsyncTicks(20)
 
     // The still-armed repaint must not resurrect recovery the pane already declared dead.
     await vi.advanceTimersByTimeAsync(60_000)
     await flushAsyncTicks(20)
-    expect(drive.writtenChunks().filter((data) => data.includes(BANNER_FRAGMENT))).toHaveLength(1)
+    expect(drive.writtenChunks().join('')).not.toContain(BANNER_FRAGMENT)
     expect(serializeBufferOutcome).toHaveBeenCalledTimes(2)
     drive.disposable.dispose()
   })

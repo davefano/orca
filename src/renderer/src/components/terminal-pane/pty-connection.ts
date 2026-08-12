@@ -5825,6 +5825,15 @@ export function connectPanePty(
       meta: { clearBeforeReplay?: boolean; pendingEscapeTailAnsi?: string } = {},
       streamGeneration = transportStreamGeneration
     ): void => {
+      if (meta.clearBeforeReplay !== false) {
+        // Why: a refreshed remote attachment's structural replay is the
+        // authoritative recovery frame. Retire the failed hidden-snapshot
+        // attempt before queueing it so old deadlines/retries cannot banner or
+        // overwrite the newly reattached live PTY.
+        clearHiddenOutputRestoreState()
+        resetHiddenOutputRestoreFloodSuppression()
+        clearRestoredSnapshotBaseline()
+      }
       pendingReplayData = {
         data,
         clearBeforeReplay: meta.clearBeforeReplay !== false,
@@ -7081,6 +7090,27 @@ export function connectPanePty(
       return true
     }
 
+    function refreshRemoteAttachmentInsteadOfDeclaringOutputLost(
+      ptyId: string,
+      reason: string
+    ): boolean {
+      if (!isRemoteRuntimePtyId(ptyId) || transport.refreshAttachment?.() !== true) {
+        return false
+      }
+      hiddenOutputRestoreRemoteAbandonCycles = 0
+      hiddenOutputRestoreRemoteOutcomeAttempts = 0
+      hiddenOutputRestoreLocalGateAttempts = 0
+      recordTerminalFreezeBreadcrumb('restore-attachment-refresh', {
+        id: redactPtyIdForDiagnostics(ptyId),
+        reason
+      })
+      // Why: a fresh subscription replays an authoritative frame for the same
+      // live PTY. Keep foreground bytes flowing while that structural replay
+      // replaces the stale renderer instead of presenting recoverable loss.
+      noteHiddenOutputRestoreFloodBackpressure()
+      return true
+    }
+
     function abandonHiddenOutputRestoreAndDrainPendingForeground(
       expectedPtyId: string,
       opts: { quiet?: boolean; rearmRemote?: boolean } = {}
@@ -7561,6 +7591,15 @@ export function connectPanePty(
                 HIDDEN_OUTPUT_RESTORE_LOCAL_GATE_MAX_ATTEMPTS
             }
             if (budgetExhausted) {
+              if (
+                refreshRemoteAttachmentInsteadOfDeclaringOutputLost(
+                  currentPtyId,
+                  `snapshot-${snapshotResult.source}-budget`
+                )
+              ) {
+                abandonHiddenOutputRestoreAndDrainPendingForeground(currentPtyId, { quiet: true })
+                return
+              }
               abandonHiddenOutputRestoreAndDrainPendingForeground(currentPtyId, {
                 rearmRemote: false
               })
@@ -7573,6 +7612,15 @@ export function connectPanePty(
             return
           }
           if (snapshotResult.kind === 'permanently-unavailable') {
+            if (
+              refreshRemoteAttachmentInsteadOfDeclaringOutputLost(
+                currentPtyId,
+                'snapshot-permanently-unavailable'
+              )
+            ) {
+              abandonHiddenOutputRestoreAndDrainPendingForeground(currentPtyId, { quiet: true })
+              return
+            }
             abandonHiddenOutputRestoreAndDrainPendingForeground(currentPtyId, {
               rearmRemote: false
             })
